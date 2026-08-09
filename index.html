@@ -3974,6 +3974,12 @@
     // room than the first. Measuring the indent against the current font turns
     // it into the same character budget the rest of the layout is tuned in;
     // without that, a balanced tail at exactly the measure runs past the edge.
+    //
+    // Known limit: the budget is a character count, which is the unit every
+    // page measure here is tuned in and is accurate for the Korean prose these
+    // pages carry. A run of unusually wide glyphs in a proportional face can
+    // still exceed the column while staying inside the count. Fixing that means
+    // moving the whole layout onto measureText, not patching this one helper.
     function wrapProseLine(ctx, text, maxCharacters, wrapIndent = 0) {
       const source = String(text);
       const words = source.split(/\s+/).filter(Boolean);
@@ -3994,14 +4000,21 @@
       // Each piece records the glue that precedes it: a space between words, and
       // nothing between the chunks of a token that was broken. Rejoining with a
       // blanket space would print a space inside the token itself.
+      //
+      // Chunking walks code points, not UTF-16 units: slicing by index would cut
+      // a surrogate pair in half and render two replacement glyphs.
       const atoms = [];
       words.forEach((word) => {
-        if (word.length <= restMax) {
+        const points = Array.from(word);
+        if (points.length <= restMax) {
           atoms.push({ text: word, glue: " " });
           return;
         }
-        for (let at = 0; at < word.length; at += restMax) {
-          atoms.push({ text: word.slice(at, at + restMax), glue: at === 0 ? " " : "" });
+        for (let at = 0; at < points.length; at += restMax) {
+          atoms.push({
+            text: points.slice(at, at + restMax).join(""),
+            glue: at === 0 ? " " : ""
+          });
         }
       });
 
