@@ -3977,8 +3977,14 @@
     //
     // It stays an approximation — the full break rules are what Intl.Segmenter
     // is for, and every browser this page targets has it.
-    const FALLBACK_CLUSTER =
-      /\p{RI}\p{RI}|\P{M}(?:\p{M}|‍\P{M}|[️\u{1F3FB}-\u{1F3FF}])*|\p{M}+/gu;
+    // Property names spelled out rather than aliased. Both forms are valid, but
+    // the long ones say what they match to anyone reading this later.
+    const FALLBACK_CLUSTER = new RegExp(
+      "\\p{Regional_Indicator}\\p{Regional_Indicator}"
+      + "|\\P{Mark}(?:\\p{Mark}|\\u200D\\P{Mark}|[\\uFE0F\\u{1F3FB}-\\u{1F3FF}])*"
+      + "|\\p{Mark}+",
+      "gu"
+    );
 
     const splitGraphemes = (text) => {
       const source = String(text);
