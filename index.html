@@ -2313,7 +2313,7 @@
     // the aphorism on the left page, an original prose response on the right.
     // Sources are public-domain philosophy unless a passage is marked as a
     // reader's note, in which case the line is written for this edition.
-    const POSTS = [
+    const VOLUMES = [
       { id: "nietzsche-zarathustra",
         title: "Thus Spoke Zarathustra", titleKo: "차라투스트라는 이렇게 말했다",
         author: "Friedrich Nietzsche", discipline: "Nietzsche", date: "1883",
@@ -3018,21 +3018,21 @@
     ];
 
 
-    const BOOKS = POSTS.map((post, index) => {
-      const base = BINDINGS[(post.bindingIndex ?? index) % BINDINGS.length];
+    const BOOKS = VOLUMES.map((volume, index) => {
+      const base = BINDINGS[(volume.bindingIndex ?? index) % BINDINGS.length];
       const jitter = (n) => (((index * 37 + n * 11) % 13) - 6) / 100;
       return {
         ...base,
-        ...post,
+        ...volume,
         roman: String(index + 1).padStart(2, "0"),
-        theme: post.discipline + " · " + post.date,
-        chapters: CATEGORY_CHAPTERS[post.discipline],
+        theme: volume.discipline + " · " + volume.date,
+        chapters: CATEGORY_CHAPTERS[volume.discipline],
         width: base.width * (1 + jitter(1) * 0.6),
         height: base.height * (1 + jitter(2) * 0.5),
         // Books with more passages sit thicker on the shelf.
         depth: Math.min(
           0.34,
-          Math.max(0.2, base.depth * (1 + jitter(3) * 1.2) + (post.passages?.length ?? 2) * 0.016)
+          Math.max(0.2, base.depth * (1 + jitter(3) * 1.2) + (volume.passages?.length ?? 2) * 0.016)
         ),
         seed: base.seed + index * 7
       };
@@ -3960,29 +3960,49 @@
       return texture;
     }
 
+    // Greedy wrapping leaves a three-syllable orphan on the turnover far too
+    // often, and an authored line that ends in a stub reads as a mistake rather
+    // than as a break. When a line needs exactly two visual lines, split it at
+    // the word boundary nearest the middle instead.
+    function wrapProseLine(text, maxCharacters) {
+      const words = String(text).split(/\s+/).filter(Boolean);
+      if (!words.length) return [];
+
+      const greedy = [];
+      let current = "";
+      words.forEach((word) => {
+        const candidate = current ? `${current} ${word}` : word;
+        if (candidate.length > maxCharacters && current) {
+          greedy.push(current);
+          current = word;
+        } else {
+          current = candidate;
+        }
+      });
+      if (current) greedy.push(current);
+      if (greedy.length !== 2) return greedy;
+
+      const target = String(text).length / 2;
+      let best = null;
+      for (let split = 1; split < words.length; split += 1) {
+        const head = words.slice(0, split).join(" ");
+        const tail = words.slice(split).join(" ");
+        if (head.length > maxCharacters || tail.length > maxCharacters) continue;
+        const cost = Math.abs(head.length - target);
+        if (!best || cost < best.cost) best = { cost, head, tail };
+      }
+      return best ? [best.head, best.tail] : greedy;
+    }
+
     // Prose is authored line by line: the break points carry the pacing, so
     // every authored line starts fresh and only wraps when it has to.
     function drawProseLines(ctx, lines, x, y, maxCharacters, lineHeight, wrapIndent = 0) {
       let cursor = y;
       lines.forEach((line) => {
-        const words = String(line).split(/\s+/);
-        let current = "";
-        let continuation = false;
-        words.forEach((word) => {
-          const candidate = current ? `${current} ${word}` : word;
-          if (candidate.length > maxCharacters && current) {
-            ctx.fillText(current, x + (continuation ? wrapIndent : 0), cursor);
-            cursor += lineHeight;
-            continuation = true;
-            current = word;
-          } else {
-            current = candidate;
-          }
-        });
-        if (current) {
-          ctx.fillText(current, x + (continuation ? wrapIndent : 0), cursor);
+        wrapProseLine(line, maxCharacters).forEach((visual, index) => {
+          ctx.fillText(visual, x + (index ? wrapIndent : 0), cursor);
           cursor += lineHeight;
-        }
+        });
       });
       return cursor;
     }

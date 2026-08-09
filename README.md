@@ -9,11 +9,14 @@ paraphrase of the quotation.
 
 [**Read the build prompt**](PROMPT.md)
 
-![The shelf with its clothbound volumes](assets/complete-shelf-preview.jpg)
+![The Nietzsche bay, with Thus Spoke Zarathustra pulled forward under the reading lamp](assets/screens/shelf.jpg)
 
 ## The collection
 
-Twenty-five volumes across five sections:
+Twenty-five volumes across five sections. The index panel lists them all; the wall keeps
+the literature bay on shelf level I and the philosophy sections on level III.
+
+![The index panel open over the literature bay, listing all twenty-five volumes](assets/screens/index-panel.jpg)
 
 | Section | Volumes |
 | --- | --- |
@@ -31,6 +34,8 @@ facing it.
 The readings follow one rule: they do not explain the quotation. They put a scene down
 first, let the sentences disagree with each other slightly, and arrive at the meaning a
 beat late — so the page can be read once for the image and again for the thought.
+
+![An open spread: the passage set large on the verso, its reading on the recto](assets/screens/reading-spread.jpg)
 
 ```text
 사람은 극복되어야 할 그 무엇이다.          ←  passage
@@ -96,7 +101,7 @@ graphs.
 
 ## Adding a volume
 
-Volumes are plain data near the top of the module script. Add an entry to `POSTS`:
+Volumes are plain data near the top of the module script. Add an entry to `VOLUMES`:
 
 ```js
 { id: "montaigne-essays",
@@ -115,8 +120,12 @@ Volumes are plain data near the top of the module script. Add an entry to `POSTS
 ```
 
 `discipline` must match an entry in `CATEGORY_ORDER` (or be `"Literature"` for the lower
-bay). Everything else — binding, palette, shelf slot, pagination, spread labels — is
-derived. A bay holds up to eight volumes.
+bay). Everything else — binding, palette, shelf slot, pagination, spread labels, and the
+page-canvas aspect — is derived. A bay holds up to eight volumes.
+
+`reading` is an array because the line breaks are the pacing. The renderer keeps them and
+only wraps a line that exceeds the measure, splitting it near the middle rather than
+leaving a two-syllable orphan on the turnover.
 
 ## Run locally
 
@@ -135,12 +144,13 @@ Three.js modules and the Inter font.
 
 ```text
 complete-shelf/
-├── index.html      # Complete production experience
+├── index.html       # Complete production experience
 ├── assets/
-│   ├── covers/     # Cover artwork for the literature bay
-│   └── *.webp      # Backdrop and preview art
-├── PROMPT.md       # Portable recreation and remix brief
-└── README.md       # Project overview and implementation notes
+│   ├── covers/      # Cover artwork for the literature bay
+│   ├── screens/     # Screenshots used in this README
+│   └── *.webp       # Backdrop art
+├── PROMPT.md        # Portable recreation and remix brief
+└── README.md        # Project overview and implementation notes
 ```
 
 ## Credits and scope
