@@ -3971,6 +3971,12 @@
 
     // Approximation for engines without Intl.Segmenter: a flag pair, or a base
     // plus its marks, joiners, variation selectors, and skin-tone modifiers.
+    // Composing first matters most here: decomposed Hangul is three jamo, none
+    // of them a combining mark, so without NFC the fallback would count one
+    // syllable as three and could cut inside it.
+    //
+    // It stays an approximation — the full break rules are what Intl.Segmenter
+    // is for, and every browser this page targets has it.
     const FALLBACK_CLUSTER =
       /\p{RI}\p{RI}|\P{M}(?:\p{M}|‍\P{M}|[️\u{1F3FB}-\u{1F3FF}])*|\p{M}+/gu;
 
@@ -3979,7 +3985,8 @@
       if (graphemeSegmenter) {
         return Array.from(graphemeSegmenter.segment(source), (part) => part.segment);
       }
-      return source.match(FALLBACK_CLUSTER) || Array.from(source);
+      const composed = source.normalize ? source.normalize("NFC") : source;
+      return composed.match(FALLBACK_CLUSTER) || Array.from(composed);
     };
 
     const cellCount = (text) => splitGraphemes(text).length;

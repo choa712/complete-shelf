@@ -132,8 +132,9 @@ nearest the middle. Lines that need three or more fall back to greedy wrapping, 
 short last line is ordinary rather than jarring.
 
 Continuation lines are indented, so they are measured against a smaller budget than the
-first. A token with no break point in it — a URL, a long compound — is hard-broken at
-grapheme boundaries rather than left to run off the leaf.
+first. A token with no break point in it — a URL, a long compound — is hard-broken rather
+than left to run off the leaf, at grapheme boundaries where `Intl.Segmenter` is available,
+which is every browser this page targets. Older engines fall back to an approximation.
 
 The budget is a character count, not a pixel width. That is the unit every page measure
 here is tuned in, and it holds for the Korean prose these pages carry, where glyphs are
