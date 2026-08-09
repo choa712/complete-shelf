@@ -3960,6 +3960,19 @@
       return texture;
     }
 
+    // What counts as one character when a token has to be broken. Code points
+    // are not enough: a ZWJ sequence, a flag, or a base plus its combining mark
+    // are several code points that must not be separated.
+    const graphemeSegmenter = typeof Intl !== "undefined" && Intl.Segmenter
+      ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
+      : null;
+
+    const splitGraphemes = (text) => (
+      graphemeSegmenter
+        ? Array.from(graphemeSegmenter.segment(text), (part) => part.segment)
+        : Array.from(text)
+    );
+
     // Greedy wrapping leaves a two-syllable stub on the turnover far too often,
     // and an authored line that ends in one reads as a mistake rather than as a
     // break. When a line needs exactly two visual lines, split at the word
@@ -4001,18 +4014,19 @@
       // nothing between the chunks of a token that was broken. Rejoining with a
       // blanket space would print a space inside the token itself.
       //
-      // Chunking walks code points, not UTF-16 units: slicing by index would cut
-      // a surrogate pair in half and render two replacement glyphs.
+      // Chunking walks grapheme clusters. Slicing by UTF-16 index cuts surrogate
+      // pairs in half; slicing by code point still separates a ZWJ sequence, a
+      // flag, or a combining mark from what it belongs to.
       const atoms = [];
       words.forEach((word) => {
-        const points = Array.from(word);
-        if (points.length <= restMax) {
+        const cells = splitGraphemes(word);
+        if (cells.length <= restMax) {
           atoms.push({ text: word, glue: " " });
           return;
         }
-        for (let at = 0; at < points.length; at += restMax) {
+        for (let at = 0; at < cells.length; at += restMax) {
           atoms.push({
-            text: points.slice(at, at + restMax).join(""),
+            text: cells.slice(at, at + restMax).join(""),
             glue: at === 0 ? " " : ""
           });
         }
