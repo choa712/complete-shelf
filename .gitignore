@@ -1,1 +1,7 @@
 .DS_Store
+
+# Local working art: full-resolution sources and scratch renders.
+# Only the optimized .webp files the page actually loads are committed.
+assets/gen/
+assets/plates/
+assets/**/gen/
