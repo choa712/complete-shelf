@@ -3979,12 +3979,24 @@
     // is for, and every browser this page targets has it.
     // Property names spelled out rather than aliased. Both forms are valid, but
     // the long ones say what they match to anyone reading this later.
-    const FALLBACK_CLUSTER = new RegExp(
-      "\\p{Regional_Indicator}\\p{Regional_Indicator}"
-      + "|\\P{Mark}(?:\\p{Mark}|\\u200D\\P{Mark}|[\\uFE0F\\u{1F3FB}-\\u{1F3FF}])*"
-      + "|\\p{Mark}+",
-      "gu"
-    );
+    //
+    // Built at runtime inside a guard, and never as a literal. Intl.Segmenter
+    // shipped years after property escapes did, so an engine old enough to miss
+    // the segmenter may also miss \p{...}. A literal would fail to parse and
+    // take the whole module with it; this degrades instead, one more step down
+    // the chain: segmenter, then property escapes, then code points.
+    const FALLBACK_CLUSTER = (() => {
+      try {
+        return new RegExp(
+          "\\p{Regional_Indicator}\\p{Regional_Indicator}"
+          + "|\\P{Mark}(?:\\p{Mark}|\\u200D\\P{Mark}|[\\uFE0F\\u{1F3FB}-\\u{1F3FF}])*"
+          + "|\\p{Mark}+",
+          "gu"
+        );
+      } catch (error) {
+        return null;
+      }
+    })();
 
     const splitGraphemes = (text) => {
       const source = String(text);
@@ -3992,6 +4004,7 @@
         return Array.from(graphemeSegmenter.segment(source), (part) => part.segment);
       }
       const composed = source.normalize ? source.normalize("NFC") : source;
+      if (!FALLBACK_CLUSTER) return Array.from(composed);
       return composed.match(FALLBACK_CLUSTER) || Array.from(composed);
     };
 
