@@ -1,36 +1,88 @@
-# The Complete Shelf
+# The Third Shelf
 
-An original, interactive Three.js library of seven clothbound hardcovers. Browse the continuous shelf, pull a volume into a responsive detail view, orbit the binding, and drag through a small set of physically curved pages.
+An interactive Three.js library of clothbound volumes. Walk the wall, pull a book into a
+responsive detail view, orbit the binding, and drag through physically curved pages.
 
-[**View the live experience**](https://mengto.github.io/complete-shelf/) · [**Read the build prompt**](PROMPT.md)
+Every volume is paginated the same way. The left page carries a passage; the right page
+carries a reading of it — a short piece of prose written for this edition rather than a
+paraphrase of the quotation.
 
-![The Complete Shelf with seven clothbound volumes](assets/complete-shelf-preview.jpg)
+[**Read the build prompt**](PROMPT.md)
 
-The collection is organized around seven tools for modern creative work:
+![The shelf with its clothbound volumes](assets/complete-shelf-preview.jpg)
 
-1. Codex
-2. Claude Code
-3. Cursor
-4. Antigravity
-5. Figma
-6. Framer
-7. Xcode
+## The collection
+
+Twenty-five volumes across five sections:
+
+| Section | Volumes |
+| --- | --- |
+| Nietzsche | Thus Spoke Zarathustra · Beyond Good and Evil · The Gay Science · On the Genealogy of Morals · Twilight of the Idols · Human, All Too Human |
+| Schopenhauer | The World as Will and Representation · Counsels and Maxims · The Wisdom of Life · On the Suffering of the World · The Art of Being Right |
+| Stoics | Meditations · On the Shortness of Life · The Enchiridion · Letters from a Stoic |
+| Moralists | Essays · Pensées · Maxims · The Art of Worldly Wisdom |
+| Literature | Otrovert · Schopenhauer's Life Lessons · The Words of Nietzsche · Nineteen Eighty-Four · Dark Psychology · Demian |
+
+## Passages and readings
+
+Each book carries two or three passages. A passage is a quotation; a reading is the page
+facing it.
+
+The readings follow one rule: they do not explain the quotation. They put a scene down
+first, let the sentences disagree with each other slightly, and arrive at the meaning a
+beat late — so the page can be read once for the image and again for the thought.
+
+```text
+사람은 극복되어야 할 그 무엇이다.          ←  passage
+                                            차라투스트라는 이렇게 말했다 · 제1부 · 서설
+
+오래 앉아 있던 자리에서 일어설 때,          ←  reading
+몸이 잠깐 자기 모양을 기억한다.
+굽었던 쪽이 먼저 아프고, 펴는 일은 그다음이다.
+극복은 크게 들리는 말이지만
+시작은 대개 어제의 자세를 오늘 다시 쓰지 않는 데 있다.
+일어선 뒤에도 의자는 그 자리에 그대로 있었다.
+```
+
+Passages come from public-domain editions. Where a book is still in copyright, the left
+page carries a reader's note written for this edition instead of a quotation, marked
+`독서 노트` in its attribution line.
+
+The passages are quoted, so they are unsigned. The readings are authored, so each one is
+signed at the foot of its page — `lucy`. The colophon says the same in full.
 
 ## What is inside
 
-- A continuous seven-volume shelf navigated with the wheel, arrow keys, buttons, or position markers.
-- Detailed hardcover construction with separate boards, spine, hinges, endpapers, page block, headbands, bookmark, foil, and contact shadows.
-- Responsive inspection mode with orbit, pan, zoom, hover-to-crack-open, click-to-open, and drag-to-turn page interactions.
-- Book-specific color systems that recolor the scene and editorial detail layout.
+- A four-bay shelf wall navigated with the wheel, arrow keys, buttons, position markers,
+  or the index panel.
+- Hardcover construction with separate boards, spine, hinges, endpapers, page block,
+  headbands, bookmark, foil, and contact shadows.
+- Responsive inspection mode with orbit, pan, zoom, hover-to-crack-open, click-to-open,
+  and drag-to-turn page interactions.
+- Page count that follows content: a volume with three passages binds eight leaves, one
+  with two binds six.
+- Page artwork authored at each volume's own sheet aspect, so a leaf's type is never
+  stretched to fit a differently proportioned surface.
+- A reading mode: opening the cover clears the editorial panel, centres the spread, and
+  leaves only close, the two page buttons, and a line of page info. Escape closes the
+  book; a second Escape returns it to the shelf.
+- Book-specific color systems that recolor the scene and the editorial detail layout.
 - Procedural cloth, foil, paper, page-edge, wood, roughness, normal, and shadow textures.
-- Deterministic shelf-to-detail transitions with exact endpoints so reparenting the selected volume never produces a last-frame jump.
+- Deterministic shelf-to-detail transitions with exact endpoints, so reparenting the
+  selected volume never produces a last-frame jump.
 - Accessible HTML controls and status announcements layered over the WebGL scene.
 
 ## How it is made
 
-The entire experience lives in [`index.html`](index.html): markup, responsive layout, shaders and materials, book geometry, interaction state, animation, and embedded image atlases. There is no framework, bundler, backend, analytics layer, Mint dependency, or MCP call in the browser.
+The entire experience lives in [`index.html`](index.html): markup, responsive layout,
+shaders and materials, book geometry, interaction state, animation, and embedded image
+atlases. There is no framework, bundler, backend, or analytics layer.
 
-The render stack uses [Three.js](https://threejs.org/) with physically based materials and `OrbitControls`. Cover and wood artwork are stored as embedded WebP atlases; supporting surface detail is generated at runtime with canvas textures. Each book is assembled from reusable geometry, while the front cover and pages use hinged groups and segmented meshes for curved page-turn motion.
+The render stack uses [Three.js](https://threejs.org/) with physically based materials and
+`OrbitControls`. Cover and wood artwork are stored as embedded WebP atlases; page interiors
+and surface detail are drawn at runtime with canvas textures. Each book is assembled from
+reusable geometry, while the front cover and pages use hinged groups and segmented meshes
+for curved page-turn motion.
 
 Interaction is managed as a small state machine:
 
@@ -38,22 +90,37 @@ Interaction is managed as a small state machine:
 shelf -> opening detail -> closed inspection -> open book -> closing -> shelf
 ```
 
-Camera, book, shelf, and view-offset transforms share deterministic eased timelines. This keeps the animation continuous when a book moves between the shelf and inspection scene graphs.
+Camera, book, shelf, and view-offset transforms share deterministic eased timelines, which
+keeps the animation continuous when a book moves between the shelf and inspection scene
+graphs.
 
-## Build or remix it with an agent
+## Adding a volume
 
-Start from [`PROMPT.md`](PROMPT.md), attach a visual reference if you have one, and ask your preferred coding agent to work directly in `index.html`.
+Volumes are plain data near the top of the module script. Add an entry to `POSTS`:
 
-- [**Codex**](https://openai.com/codex/get-started/) — work in the repository, run the local site, inspect interactions, and iterate against browser proof.
-- [**Cursor**](https://www.cursor.com/) — open the folder, give Agent the prompt, and review changes in the editor.
-- [**Claude Code**](https://claude.com/product/claude-code) — run Claude in the project directory and point it at the prompt and HTML file.
-- [**Aura Build**](https://aura.build) — use the prompt and screenshots as a starting point for a visual build or remix.
+```js
+{ id: "montaigne-essays",
+  title: "Essays", titleKo: "수상록",
+  author: "Michel de Montaigne", discipline: "Moralists", date: "1580",
+  note: "What do I know?",
+  deck: "One paragraph for the detail panel.",
+  passages: [
+    { label: "Que sais-je", source: "제2권",
+      quote: "나는 무엇을 아는가?",
+      reading: [
+        "한 줄이 한 행입니다.",
+        "줄바꿈이 곧 호흡이라 배열은 그대로 유지됩니다."
+      ] }
+  ] }
+```
 
-Whichever tool you use, the useful loop is the same: make one focused change, run the page, verify the real interaction, inspect the console, and keep only the revision that improves the experience.
+`discipline` must match an entry in `CATEGORY_ORDER` (or be `"Literature"` for the lower
+bay). Everything else — binding, palette, shelf slot, pagination, spread labels — is
+derived. A bay holds up to eight volumes.
 
 ## Run locally
 
-The page uses JavaScript modules, so serve it over HTTP instead of opening it directly from disk:
+The page uses JavaScript modules, so serve it over HTTP instead of opening it from disk:
 
 ```bash
 python3 -m http.server 4173
@@ -61,29 +128,29 @@ python3 -m http.server 4173
 
 Then visit [http://localhost:4173](http://localhost:4173).
 
-No install or build step is required. An internet connection is needed for the pinned Three.js modules and Inter font.
+No install or build step is required. An internet connection is needed for the pinned
+Three.js modules and the Inter font.
 
 ## Project structure
 
 ```text
 complete-shelf/
-├── index.html   # Complete production experience
-├── PROMPT.md    # Portable recreation and remix brief
-└── README.md    # Project overview and implementation notes
+├── index.html      # Complete production experience
+├── assets/
+│   ├── covers/     # Cover artwork for the literature bay
+│   └── *.webp      # Backdrop and preview art
+├── PROMPT.md       # Portable recreation and remix brief
+└── README.md       # Project overview and implementation notes
 ```
 
-## Design notes
+## Credits and scope
 
-The visual direction studies the clarity, material craft, and book photography of contemporary editorial publishers, including [Stripe Press](https://press.stripe.com/), while using original book titles, cover artwork, textures, layouts, and interaction design. This project is independent and is not affiliated with Stripe Press or the products represented by the seven volumes.
+The shelf and hardcover construction began from
+[The Complete Shelf](https://mengto.github.io/complete-shelf/) by Meng To. This edition
+keeps that craft and rebuilds the rest around a different collection, a content-driven
+pagination model, and the passage/reading spread.
 
-## More open source
-
-- **[Skills](https://github.com/MengTo/Skills)** — agent skills for designers and builders using Codex, Claude, Cursor and other AI coding agents. Browse them at [ui-skills.com](https://ui-skills.com).
-- **[Sketchbook](https://github.com/MengTo/sketchbook)** — a page-flipping sketchbook of Singapore in one static HTML file. [Live](https://mengto.com)
-- **[A Long-Expected Party](https://github.com/MengTo/a-long-expected-party)** — a procedural short film rendered live in the browser, with a Higgsfield-generated score and narration. [Live](https://mengto.github.io/a-long-expected-party/)
-
-## What I build
-
-- **[Aura](https://aura.build)** — an AI website builder that creates landing pages in seconds and exports to HTML and Figma.
-- **[Design+Code](https://designcode.io)** — learn to design and code React and Swift apps.
-- **[DreamCut](https://dreamcut.ai)** — an AI video editor and screen recorder.
+The visual direction studies the clarity and material craft of contemporary editorial book
+publishing, including [Stripe Press](https://press.stripe.com/), while using original
+bindings, textures, layouts, and interaction design. This project is independent and is not
+affiliated with any publisher named here.
