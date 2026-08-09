@@ -3990,37 +3990,46 @@
       // A token with no break point in it would run off the leaf. Hard-break it
       // at the narrower budget so a chunk fits on any line. The data has none
       // today, but the README documents how to add volumes.
+      //
+      // Each piece records the glue that precedes it: a space between words, and
+      // nothing between the chunks of a token that was broken. Rejoining with a
+      // blanket space would print a space inside the token itself.
       const atoms = [];
       words.forEach((word) => {
         if (word.length <= restMax) {
-          atoms.push(word);
+          atoms.push({ text: word, glue: " " });
           return;
         }
         for (let at = 0; at < word.length; at += restMax) {
-          atoms.push(word.slice(at, at + restMax));
+          atoms.push({ text: word.slice(at, at + restMax), glue: at === 0 ? " " : "" });
         }
       });
 
+      const joinAtoms = (list) => list.reduce(
+        (line, atom, index) => (index === 0 ? atom.text : line + atom.glue + atom.text),
+        ""
+      );
+
       const budgetFor = (lineIndex) => (lineIndex === 0 ? firstMax : restMax);
       const greedy = [];
-      let current = "";
+      let current = [];
       atoms.forEach((atom) => {
-        const candidate = current ? `${current} ${atom}` : atom;
-        if (candidate.length > budgetFor(greedy.length) && current) {
-          greedy.push(current);
-          current = atom;
+        const candidate = current.length ? joinAtoms([...current, atom]) : atom.text;
+        if (candidate.length > budgetFor(greedy.length) && current.length) {
+          greedy.push(joinAtoms(current));
+          current = [atom];
         } else {
-          current = candidate;
+          current = [...current, atom];
         }
       });
-      if (current) greedy.push(current);
+      if (current.length) greedy.push(joinAtoms(current));
       if (greedy.length !== 2) return greedy;
 
       const target = source.length / 2;
       let best = null;
       for (let split = 1; split < atoms.length; split += 1) {
-        const head = atoms.slice(0, split).join(" ");
-        const tail = atoms.slice(split).join(" ");
+        const head = joinAtoms(atoms.slice(0, split));
+        const tail = joinAtoms(atoms.slice(split));
         if (head.length > firstMax || tail.length > restMax) continue;
         const cost = Math.abs(head.length - target);
         if (!best || cost < best.cost) best = { cost, head, tail };
