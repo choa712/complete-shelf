@@ -124,8 +124,13 @@ bay). Everything else — binding, palette, shelf slot, pagination, spread label
 page-canvas aspect — is derived. A bay holds up to eight volumes.
 
 `reading` is an array because the line breaks are the pacing. The renderer keeps them and
-only wraps a line that exceeds the measure, splitting it near the middle rather than
-leaving a two-syllable orphan on the turnover.
+only wraps a line that exceeds the measure.
+
+When a line needs exactly two visual lines — the common case, and the one where a
+two-syllable stub on the turnover reads worst — the break moves to the word boundary
+nearest the middle. Lines that need three or more fall back to greedy wrapping, where a
+short last line is ordinary rather than jarring. A single word longer than the measure
+still overflows; none of the passages or readings contains one.
 
 ## Run locally
 

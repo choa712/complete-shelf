@@ -3960,10 +3960,16 @@
       return texture;
     }
 
-    // Greedy wrapping leaves a three-syllable orphan on the turnover far too
-    // often, and an authored line that ends in a stub reads as a mistake rather
-    // than as a break. When a line needs exactly two visual lines, split it at
-    // the word boundary nearest the middle instead.
+    // Greedy wrapping leaves a two-syllable stub on the turnover far too often,
+    // and an authored line that ends in one reads as a mistake rather than as a
+    // break. When a line needs exactly two visual lines, split at the word
+    // boundary nearest the middle instead.
+    //
+    // Deliberately narrow: three or more lines keep greedy wrapping, where a
+    // short last line is ordinary. The rebalance never changes the line count
+    // and never accepts a piece wider than the measure, so callers that lay out
+    // from the returned cursor cannot reflow. A single word longer than the
+    // measure still overflows; no passage or reading contains one.
     function wrapProseLine(text, maxCharacters) {
       const words = String(text).split(/\s+/).filter(Boolean);
       if (!words.length) return [];
