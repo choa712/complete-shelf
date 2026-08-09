@@ -3967,20 +3967,48 @@
     //
     // Deliberately narrow: three or more lines keep greedy wrapping, where a
     // short last line is ordinary. The rebalance never changes the line count
-    // and never accepts a piece wider than the measure, so callers that lay out
-    // from the returned cursor cannot reflow. A single word longer than the
-    // measure still overflows; no passage or reading contains one.
-    function wrapProseLine(text, maxCharacters) {
-      const words = String(text).split(/\s+/).filter(Boolean);
+    // and never accepts a piece wider than its own budget, so callers that lay
+    // out from the returned cursor cannot reflow.
+    //
+    // Continuation lines start wrapIndent to the right and therefore have less
+    // room than the first. Measuring the indent against the current font turns
+    // it into the same character budget the rest of the layout is tuned in;
+    // without that, a balanced tail at exactly the measure runs past the edge.
+    function wrapProseLine(ctx, text, maxCharacters, wrapIndent = 0) {
+      const source = String(text);
+      const words = source.split(/\s+/).filter(Boolean);
       if (!words.length) return [];
 
+      let indentBudget = 0;
+      if (wrapIndent > 0 && source.length) {
+        const averageGlyph = ctx.measureText(source).width / source.length;
+        if (averageGlyph > 0) indentBudget = Math.ceil(wrapIndent / averageGlyph);
+      }
+      const firstMax = Math.max(4, maxCharacters);
+      const restMax = Math.max(4, maxCharacters - indentBudget);
+
+      // A token with no break point in it would run off the leaf. Hard-break it
+      // at the narrower budget so a chunk fits on any line. The data has none
+      // today, but the README documents how to add volumes.
+      const atoms = [];
+      words.forEach((word) => {
+        if (word.length <= restMax) {
+          atoms.push(word);
+          return;
+        }
+        for (let at = 0; at < word.length; at += restMax) {
+          atoms.push(word.slice(at, at + restMax));
+        }
+      });
+
+      const budgetFor = (lineIndex) => (lineIndex === 0 ? firstMax : restMax);
       const greedy = [];
       let current = "";
-      words.forEach((word) => {
-        const candidate = current ? `${current} ${word}` : word;
-        if (candidate.length > maxCharacters && current) {
+      atoms.forEach((atom) => {
+        const candidate = current ? `${current} ${atom}` : atom;
+        if (candidate.length > budgetFor(greedy.length) && current) {
           greedy.push(current);
-          current = word;
+          current = atom;
         } else {
           current = candidate;
         }
@@ -3988,12 +4016,12 @@
       if (current) greedy.push(current);
       if (greedy.length !== 2) return greedy;
 
-      const target = String(text).length / 2;
+      const target = source.length / 2;
       let best = null;
-      for (let split = 1; split < words.length; split += 1) {
-        const head = words.slice(0, split).join(" ");
-        const tail = words.slice(split).join(" ");
-        if (head.length > maxCharacters || tail.length > maxCharacters) continue;
+      for (let split = 1; split < atoms.length; split += 1) {
+        const head = atoms.slice(0, split).join(" ");
+        const tail = atoms.slice(split).join(" ");
+        if (head.length > firstMax || tail.length > restMax) continue;
         const cost = Math.abs(head.length - target);
         if (!best || cost < best.cost) best = { cost, head, tail };
       }
@@ -4005,7 +4033,7 @@
     function drawProseLines(ctx, lines, x, y, maxCharacters, lineHeight, wrapIndent = 0) {
       let cursor = y;
       lines.forEach((line) => {
-        wrapProseLine(line, maxCharacters).forEach((visual, index) => {
+        wrapProseLine(ctx, line, maxCharacters, wrapIndent).forEach((visual, index) => {
           ctx.fillText(visual, x + (index ? wrapIndent : 0), cursor);
           cursor += lineHeight;
         });

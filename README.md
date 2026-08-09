@@ -129,8 +129,11 @@ only wraps a line that exceeds the measure.
 When a line needs exactly two visual lines — the common case, and the one where a
 two-syllable stub on the turnover reads worst — the break moves to the word boundary
 nearest the middle. Lines that need three or more fall back to greedy wrapping, where a
-short last line is ordinary rather than jarring. A single word longer than the measure
-still overflows; none of the passages or readings contains one.
+short last line is ordinary rather than jarring.
+
+Continuation lines are indented, so they are measured against a smaller budget than the
+first. A token with no break point in it — a URL, a long compound — is hard-broken rather
+than allowed to run off the leaf.
 
 ## Run locally
 
