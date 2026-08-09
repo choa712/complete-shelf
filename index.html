@@ -3960,18 +3960,29 @@
       return texture;
     }
 
-    // What counts as one character when a token has to be broken. Code points
-    // are not enough: a ZWJ sequence, a flag, or a base plus its combining mark
-    // are several code points that must not be separated.
+    // What counts as one character everywhere below. Not UTF-16 units, which
+    // count an emoji as two, and not code points, which separate a ZWJ sequence,
+    // a flag, or a base from its combining mark. One unit, used for chunking and
+    // for every budget comparison — mixing them is what lets a line that passes
+    // the check still run past the edge.
     const graphemeSegmenter = typeof Intl !== "undefined" && Intl.Segmenter
       ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
       : null;
 
-    const splitGraphemes = (text) => (
-      graphemeSegmenter
-        ? Array.from(graphemeSegmenter.segment(text), (part) => part.segment)
-        : Array.from(text)
-    );
+    // Approximation for engines without Intl.Segmenter: a flag pair, or a base
+    // plus its marks, joiners, variation selectors, and skin-tone modifiers.
+    const FALLBACK_CLUSTER =
+      /\p{RI}\p{RI}|\P{M}(?:\p{M}|‍\P{M}|[️\u{1F3FB}-\u{1F3FF}])*|\p{M}+/gu;
+
+    const splitGraphemes = (text) => {
+      const source = String(text);
+      if (graphemeSegmenter) {
+        return Array.from(graphemeSegmenter.segment(source), (part) => part.segment);
+      }
+      return source.match(FALLBACK_CLUSTER) || Array.from(source);
+    };
+
+    const cellCount = (text) => splitGraphemes(text).length;
 
     // Greedy wrapping leaves a two-syllable stub on the turnover far too often,
     // and an authored line that ends in one reads as a mistake rather than as a
@@ -3999,66 +4010,78 @@
       if (!words.length) return [];
 
       let indentBudget = 0;
-      if (wrapIndent > 0 && source.length) {
-        const averageGlyph = ctx.measureText(source).width / source.length;
+      const sourceCells = cellCount(source);
+      if (wrapIndent > 0 && sourceCells) {
+        const averageGlyph = ctx.measureText(source).width / sourceCells;
         if (averageGlyph > 0) indentBudget = Math.ceil(wrapIndent / averageGlyph);
       }
       const firstMax = Math.max(4, maxCharacters);
       const restMax = Math.max(4, maxCharacters - indentBudget);
+      const budgetFor = (lineIndex) => (lineIndex === 0 ? firstMax : restMax);
 
-      // A token with no break point in it would run off the leaf. Hard-break it
-      // at the narrower budget so a chunk fits on any line. The data has none
-      // today, but the README documents how to add volumes.
+      // Pack greedily, breaking a token only when it alone will not fit the line
+      // it has landed on. Doing it here rather than up front means a long token
+      // uses the wider first-line budget when it starts there, and that no piece
+      // is ever emitted over budget.
       //
       // Each piece records the glue that precedes it: a space between words, and
       // nothing between the chunks of a token that was broken. Rejoining with a
       // blanket space would print a space inside the token itself.
-      //
-      // Chunking walks grapheme clusters. Slicing by UTF-16 index cuts surrogate
-      // pairs in half; slicing by code point still separates a ZWJ sequence, a
-      // flag, or a combining mark from what it belongs to.
       const atoms = [];
+      const lines = [];
+      let current = [];
+      const flush = () => {
+        if (!current.length) return;
+        lines.push(current);
+        current = [];
+      };
+      const width = (list, atom) => cellCount(
+        list.reduce((line, part, i) => (i === 0 ? part.text : line + part.glue + part.text), "")
+        + (list.length && atom ? atom.glue : "")
+        + (atom ? atom.text : "")
+      );
+
       words.forEach((word) => {
-        const cells = splitGraphemes(word);
-        if (cells.length <= restMax) {
-          atoms.push({ text: word, glue: " " });
-          return;
-        }
-        for (let at = 0; at < cells.length; at += restMax) {
-          atoms.push({
-            text: cells.slice(at, at + restMax).join(""),
-            glue: at === 0 ? " " : ""
-          });
+        let remainder = word;
+        let glue = " ";
+        while (remainder) {
+          const atom = { text: remainder, glue };
+          const budget = budgetFor(lines.length);
+          if (width(current, atom) <= budget) {
+            current.push(atom);
+            atoms.push(atom);
+            break;
+          }
+          if (current.length) {
+            flush();
+            continue;              // retry the whole token on the fresh line
+          }
+          // Alone on an empty line and still too wide: break it here.
+          const cells = splitGraphemes(remainder);
+          const head = { text: cells.slice(0, budget).join(""), glue };
+          current.push(head);
+          atoms.push(head);
+          flush();
+          remainder = cells.slice(budget).join("");
+          glue = "";
         }
       });
+      flush();
 
-      const joinAtoms = (list) => list.reduce(
+      const render = (list) => list.reduce(
         (line, atom, index) => (index === 0 ? atom.text : line + atom.glue + atom.text),
         ""
       );
-
-      const budgetFor = (lineIndex) => (lineIndex === 0 ? firstMax : restMax);
-      const greedy = [];
-      let current = [];
-      atoms.forEach((atom) => {
-        const candidate = current.length ? joinAtoms([...current, atom]) : atom.text;
-        if (candidate.length > budgetFor(greedy.length) && current.length) {
-          greedy.push(joinAtoms(current));
-          current = [atom];
-        } else {
-          current = [...current, atom];
-        }
-      });
-      if (current.length) greedy.push(joinAtoms(current));
+      const greedy = lines.map(render);
       if (greedy.length !== 2) return greedy;
 
-      const target = source.length / 2;
+      const target = sourceCells / 2;
       let best = null;
       for (let split = 1; split < atoms.length; split += 1) {
-        const head = joinAtoms(atoms.slice(0, split));
-        const tail = joinAtoms(atoms.slice(split));
-        if (head.length > firstMax || tail.length > restMax) continue;
-        const cost = Math.abs(head.length - target);
+        const head = render(atoms.slice(0, split));
+        const tail = render(atoms.slice(split));
+        if (cellCount(head) > firstMax || cellCount(tail) > restMax) continue;
+        const cost = Math.abs(cellCount(head) - target);
         if (!best || cost < best.cost) best = { cost, head, tail };
       }
       return best ? [best.head, best.tail] : greedy;
