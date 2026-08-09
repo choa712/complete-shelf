@@ -5,3 +5,7 @@
 assets/gen/
 assets/plates/
 assets/**/gen/
+
+# Wrangler local state (deploy.sh 실행 시 생성)
+.wrangler/
+node_modules/

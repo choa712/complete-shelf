@@ -1,0 +1,9 @@
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+
+# 표지·배경은 파일명이 고정(content hash 아님)이라 immutable 을 쓰면 안 된다.
+# 이미지를 교체했을 때 이미 받아간 클라이언트가 만료까지 옛 그림을 계속 본다.
+# 1시간 캐시 + 백그라운드 재검증이면 재방문은 빠르고 교체는 한 시간 안에 퍼진다.
+/assets/*
+  Cache-Control: public, max-age=3600, stale-while-revalidate=86400
