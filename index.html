@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- viewport-fit=cover is what makes env(safe-area-inset-*) resolve to
+       anything. Without it the insets are always zero and the bottom controls
+       sit under the home indicator. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#171a24">
   <meta
     name="description"
@@ -652,6 +655,13 @@
     /* The sheet lip only exists where the sheet does. A wider screen has room
        for the whole panel at once and never collapses it. */
     .sheet-handle {
+      display: none;
+    }
+
+    /* The camera rail and the reading-mode close are phone controls; a mouse
+       already has the wheel and the whole background to drag on. */
+    .camera-rail,
+    .close-book {
       display: none;
     }
 
@@ -1954,6 +1964,73 @@
         outline-offset: 3px;
       }
 
+      /* With the covers shut the page arrows are disabled and the status reads
+         "click book to open", so the row is a strip of dead controls between
+         the reader and the two that work. It comes back when there are pages. */
+      .experience:not(.is-reading) .page-navigation {
+        display: none;
+      }
+
+      .detail-controls {
+        align-items: center;
+        margin-top: 0;
+        padding-top: 6px;
+      }
+
+      .camera-rail {
+        display: flex;
+        flex: none;
+        gap: 10px;
+      }
+
+      /* Forty-four is the smallest square a thumb reliably hits. Open book and
+         Reset view were thirty-two tall with no padding at all. */
+      .camera-rail .page-button {
+        width: 44px;
+        height: 44px;
+      }
+
+      .detail-buttons {
+        gap: 14px;
+      }
+
+      .reset-button {
+        min-height: 44px;
+        padding: 0 2px;
+      }
+
+      .close-button {
+        width: 44px;
+        height: 44px;
+      }
+
+      .experience.is-reading .close-book {
+        display: grid;
+        position: absolute;
+        z-index: 12;
+        top: clamp(16px, 2.4vw, 30px);
+        left: clamp(16px, 2.4vw, 30px);
+        place-items: center;
+        min-width: 44px;
+        min-height: 44px;
+        padding: 0 14px;
+        border: 1px solid color-mix(in srgb, var(--ink) 32%, transparent);
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--paper-deep) 46%, transparent);
+        backdrop-filter: blur(8px);
+        color: var(--ink);
+        font-family: inherit;
+        font-size: 0.62rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        pointer-events: auto;
+      }
+
+      .close-book:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+      }
+
       .experience:not(.is-reading) .page-navigation,
       .experience:not(.is-reading) .passage-quote,
       .experience:not(.is-reading) .detail-controls {
@@ -2098,7 +2175,9 @@
     /* Absolute against .page-navigation, which is centred on the spread. */
     .experience.is-reading .page-status {
       position: absolute;
-      bottom: clamp(18px, 4.4vh, 40px);
+      /* dvh, not vh: vh resolves against the large viewport, so under a visible
+         URL bar these land beneath it. Plus the home indicator's own strip. */
+      bottom: calc(clamp(18px, 4.4dvh, 40px) + env(safe-area-inset-bottom));
       left: 50%;
       width: max-content;
       max-width: min(78vw, 480px);
@@ -2126,7 +2205,7 @@
        and the two conditions would then disagree. */
     .experience.is-reading.is-single-page .page-navigation {
       top: auto;
-      bottom: clamp(14px, 3.4vh, 34px);
+      bottom: calc(clamp(14px, 3.4dvh, 34px) + env(safe-area-inset-bottom));
       align-items: flex-end;
       padding: 0 14px;
     }
@@ -2268,11 +2347,28 @@
       </figure>
       <div class="detail-controls">
         <p class="microcopy">Drag cover or click once to open · Background to orbit</p>
+        <!-- The volume is drawn at 94% of a phone's width, so there is almost
+             no background left to start a one-finger orbit on. These are the
+             way in for a reader who has not found the pinch. -->
+        <div class="camera-rail" id="camera-rail" role="group" aria-label="Adjust the view">
+          <button class="page-button" id="zoom-in" type="button" aria-label="Zoom in">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9"></path></svg>
+          </button>
+          <button class="page-button" id="zoom-out" type="button" aria-label="Zoom out">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8h9"></path></svg>
+          </button>
+          <button class="page-button" id="reset-camera" type="button" aria-label="Reset the view">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.6-3.6M12.4 1.8v3h-3"></path></svg>
+          </button>
+        </div>
         <div class="detail-buttons">
           <button class="text-button reset-button" id="toggle-book" type="button" aria-pressed="false">Open book</button>
           <button class="text-button reset-button" id="reset-view" type="button">Reset view</button>
         </div>
       </div>
+      <!-- Reading hides the detail controls, and with them the only way to
+           close the book. Escape covers that on a keyboard; a phone has none. -->
+      <button class="close-book" id="close-book" type="button">Close book</button>
     </aside>
 
     <div class="sr-only" id="live-region" aria-live="polite"></div>
@@ -3336,6 +3432,10 @@
     const closeButton = document.querySelector("#close-detail");
     const sheetHandle = document.querySelector("#sheet-handle");
     const sheetHandleLabel = document.querySelector("#sheet-handle-label");
+    const zoomInButton = document.querySelector("#zoom-in");
+    const zoomOutButton = document.querySelector("#zoom-out");
+    const resetCameraButton = document.querySelector("#reset-camera");
+    const closeBookButton = document.querySelector("#close-book");
     const resetButton = document.querySelector("#reset-view");
     const toggleBookButton = document.querySelector("#toggle-book");
     const previousPageButton = document.querySelector("#previous-page");
@@ -6962,6 +7062,21 @@
       }
     }
 
+    // Moves the camera along the line it already sits on, so zooming never
+    // changes what is centred - the orbit target stays where the reader put it.
+    function zoomBy(delta) {
+      if (mode !== "detail" || !controls || !camera) return;
+      const toCamera = camera.position.clone().sub(controls.target);
+      const distance = clamp(
+        toCamera.length() * (1 + delta),
+        controls.minDistance,
+        controls.maxDistance
+      );
+      camera.position.copy(controls.target).add(toCamera.setLength(distance));
+      controls.update();
+      requestFrame();
+    }
+
     // The sheet is the phone's way of asking about a volume rather than being
     // told. Its state is a class, so the wider layout - which never collapses
     // anything - is untouched by it.
@@ -8502,6 +8617,11 @@
     }
 
     function resize() {
+      // Browser chrome sliding away is a resize, and on a phone it is the most
+      // common one. It is not a new layout, so it must not reframe the volume -
+      // doing that discards whatever the reader had just zoomed to, which is
+      // experienced as the zoom not working.
+      const widthChanged = window.innerWidth !== viewWidth;
       viewWidth = window.innerWidth;
       viewHeight = window.innerHeight;
       configureResponsiveTargets();
@@ -8532,7 +8652,7 @@
         currentViewOffsetX = readingOpen ? getReadingViewOffsetX() : detailViewOffsetX;
         applyDetailViewOffset();
         updatePageControls(false);
-        resetInspectionView();
+        if (widthChanged) resetInspectionView();
       }
       requestFrame();
     }
@@ -8565,7 +8685,11 @@
       if (mode === "detail" && event.key === "Tab") {
         const focusables = [
           closeButton,
+          closeBookButton,
           sheetHandle,
+          zoomInButton,
+          zoomOutButton,
+          resetCameraButton,
           toggleBookButton,
           previousPageButton,
           nextPageButton,
@@ -8840,6 +8964,12 @@
       previousPageButton.addEventListener("click", () => turnPage(-1));
       nextPageButton.addEventListener("click", () => turnPage(1));
       resetButton.addEventListener("click", resetInspectionView);
+      // Out is the larger step because 1/(1 - 0.18) is 1.22: matching numbers
+      // would make the pair asymmetric.
+      zoomInButton.addEventListener("click", () => zoomBy(-0.18));
+      zoomOutButton.addEventListener("click", () => zoomBy(0.22));
+      resetCameraButton.addEventListener("click", resetInspectionView);
+      closeBookButton.addEventListener("click", () => setReadingOpen(false));
 
       renderer.render(scene, camera);
       loading.hidden = true;
@@ -8858,6 +8988,11 @@
       console.error("[shelf-init]", error);
       showFallback("The interactive shelf could not be prepared. The complete static catalog remains available.");
     });
+    // Read-only, for the measurement harness: whether a resize moved the camera
+    // is not a question the page can be asked from the outside otherwise.
+    window.__cameraState = () => (camera
+      ? { x: camera.position.x, y: camera.position.y, z: camera.position.z }
+      : null);
     window.addEventListener("beforeunload", disposeExperience, { once: true });
   </script>
 </body>

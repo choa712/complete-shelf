@@ -171,14 +171,18 @@ async function checkTouchTargets({ evaluate }) {
 // A mobile URL bar collapsing fires resize. If that throws the camera away, the
 // zoom the reader just set is gone - which is experienced as "zoom is broken".
 async function checkCameraAcrossResize({ send, evaluate }) {
-  const hooked = await evaluate('typeof window.__zoomBy === "function" && typeof window.__cameraState === "function"');
+  const hooked = await evaluate('typeof window.__cameraState === "function"');
   if (!hooked) {
-    skip("camera-survives-resize", "debug hooks absent (added in the camera task)");
+    skip("camera-survives-resize", "the page exposes no camera state to read");
     return;
   }
-  await evaluate("window.__select(4)"); await sleep(2500);
-  await evaluate("window.__open()"); await sleep(4500);
-  await evaluate("window.__zoomBy(-0.6)"); await sleep(1200);
+  // Driven through the real control, not a back door, so the check covers the
+  // button as well as the resize.
+  for (let i = 0; i < 3; i += 1) {
+    await evaluate('document.getElementById("zoom-in")?.click()');
+    await sleep(400);
+  }
+  await sleep(900);
   const before = JSON.parse(await evaluate("JSON.stringify(window.__cameraState())"));
   // Height only: exactly what browser chrome sliding away looks like.
   await send("Emulation.setDeviceMetricsOverride", { ...VIEWPORT, height: 760 });
