@@ -6047,11 +6047,27 @@
         // Selecting a volume already started this, so by the time a second tap
         // opens it there is usually nothing left to do - and a leaf that has
         // not printed yet shows blank paper, which is what it is.
-        drainDressing(rig);
-      } else if (!dressingTimer && dressingQueue.size) {
-        dressingTimer = window.setTimeout(pumpDressing, 0);
+        drainDressing(rig).catch(reportDressingFailure);
+      } else {
+        scheduleDressing();
       }
       trimDressed();
+    }
+
+    // A detached async call that throws is an unhandled rejection and a queue
+    // that never moves again. Whatever failed, the rest of the collection is
+    // still worth printing.
+    function reportDressingFailure(error) {
+      console.warn("[shelf] a volume could not be printed", error);
+      scheduleDressing();
+    }
+
+    function scheduleDressing() {
+      if (suspended || dressingTimer || !dressingQueue.size) return;
+      dressingTimer = window.setTimeout(
+        () => pumpDressing().catch(reportDressingFailure),
+        0
+      );
     }
 
     // A unit can await - the cover fetches its artwork - so every loop over them
@@ -6090,9 +6106,7 @@
         if (performance.now() - started >= 6) break;
       }
       if (printed) requestFrame();
-      if (dressingQueue.size && !dressingTimer) {
-        dressingTimer = window.setTimeout(pumpDressing, 0);
-      }
+      scheduleDressing();
     }
 
     function configureResponsiveTargets() {
@@ -8737,6 +8751,10 @@
       suspended = document.hidden;
       if (!suspended) {
         lastTime = performance.now();
+        // Both dressing loops bail on suspended without rescheduling, so a
+        // volume caught mid-decode when the page was backgrounded would stay
+        // half printed for the rest of the visit. Coming back restarts them.
+        scheduleDressing();
         requestFrame();
       } else {
         settlePageDrag(true);
