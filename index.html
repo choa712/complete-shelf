@@ -8090,9 +8090,14 @@
         activeBook.root.position.copy(inspectPosition);
         activeBook.root.scale.setScalar(getInspectScale());
         transitionCameraTarget.copy(inspectCameraTarget);
+        // A resize can cross the width where a spread stops fitting — turning a
+        // phone on its side does it mid-read. The camera reframes here, so the
+        // controls have to be re-derived in the same breath or the counter and
+        // its labels keep counting in the mode the reader just left.
+        clampReadingLeaf(activeBook.data);
         currentViewOffsetX = readingOpen ? getReadingViewOffsetX() : detailViewOffsetX;
         applyDetailViewOffset();
-        syncReadingSpreadWidth();
+        updatePageControls(false);
         resetInspectionView();
       }
       requestFrame();
