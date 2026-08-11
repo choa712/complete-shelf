@@ -2415,7 +2415,7 @@
       // blocked - a proxy that eats importmaps, a CDN that does not answer -
       // or the browser is too old for modules. Past the point where a working
       // load would have finished, hand over to the catalog.
-      window.setTimeout(function () {
+      window.__shelfFallbackTimer = window.setTimeout(function () {
         var experience = document.getElementById("experience");
         if (!experience || experience.classList.contains("webgl-ready")) return;
         experience.classList.add("webgl-failed");
@@ -5929,6 +5929,10 @@
           // makeCoverTexture reads the decoded image out of the cache, so the
           // fetch has to land first.
           await coverImageFor(book);
+          // A fetch is long enough for the shelf to move on and this volume to
+          // be undressed. The caller checks that too, but not until the unit
+          // has already returned - which is too late to stop it writing.
+          if (!rig.dressing) return;
           rig.dressing.cover = makeCoverTexture(book);
           rig.coverArt.map = rig.dressing.cover;
           rig.coverArt.color.setHex(0xffffff);
@@ -8973,6 +8977,11 @@
 
       renderer.render(scene, camera);
       loading.hidden = true;
+      // A load slower than the timeout has already handed over to the catalog.
+      // Arriving late is still arriving: take the catalog back down, and stop
+      // the timer so a fast load cannot be interrupted by it either.
+      window.clearTimeout(window.__shelfFallbackTimer);
+      experience.classList.remove("webgl-failed");
       experience.classList.add("webgl-ready");
       requestFrame();
 

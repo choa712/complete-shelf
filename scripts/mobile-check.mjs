@@ -43,7 +43,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function serve() {
   const server = createServer(async (req, res) => {
-    const requested = join(ROOT, decodeURIComponent(req.url.split("?")[0]));
+    const requested = resolve(ROOT, `.${decodeURIComponent(req.url.split("?")[0])}`);
+    // join() happily normalises ../.. straight out of the repo, and this server
+    // runs on a predictable localhost port while a browser is pointed at it.
+    if (requested !== ROOT && !requested.startsWith(`${ROOT}/`)) {
+      res.writeHead(403).end("forbidden");
+      return;
+    }
     try {
       const info = await stat(requested);
       const file = info.isDirectory() ? join(requested, "index.html") : requested;
