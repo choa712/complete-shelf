@@ -16,7 +16,7 @@ paraphrase of the quotation.
 Twenty-six volumes across five sections. The index panel lists them all; the wall keeps
 the literature bay on shelf level I and the philosophy sections on level III.
 
-![The index panel open over the literature bay, listing all twenty-five volumes](assets/screens/index-panel.jpg)
+![The index panel open over the literature bay, listing all twenty-six volumes](assets/screens/index-panel.jpg)
 
 | Section | Volumes |
 | --- | --- |
@@ -155,8 +155,9 @@ paragraphs, each an array of authored lines:
 ```
 
 The text is flowed across leaves at one line capacity per page, so the page count follows
-the writing. A paragraph break becomes a rest, and a rest that lands on a page edge is
-dropped rather than printed as a short page. The piece is padded to an even page count
+the writing. A paragraph break becomes a rest; a rest that lands on a page edge is dropped
+and the paragraph after it opens the next page, which leaves that page a line short rather
+than running two paragraphs together across the turn. The piece is padded to an even count
 because a leaf has two sides and an odd count would split a spread. Spreads are labelled
 from `proseTitle`, and the detail panel mirrors nothing while reading, since the page is
 not facing a quotation.

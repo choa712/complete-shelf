@@ -2026,21 +2026,24 @@
       opacity: 0.72;
     }
 
-    @media (max-width: 820px) {
-      /* Reading one page at a time, that page fills the width, so buttons
-         centred on it would sit on the first character of every line. They
-         drop to the page line instead, off the paper. */
-      .experience.is-reading .page-navigation {
-        top: auto;
-        bottom: clamp(14px, 3.4vh, 34px);
-        align-items: flex-end;
-        padding: 0 14px;
-      }
+    /* Reading one page at a time, that page fills the width, so buttons centred
+       on it would sit on the first character of every line. They drop to the
+       page line instead, off the paper.
 
-      .experience.is-reading .page-status {
-        position: static;
-        transform: none;
-      }
+       Keyed on the state class rather than a width, because single-page reading
+       is decided by measuring whether the spread fits: a viewport just wide
+       enough to clear a breakpoint can still be too narrow to hold a spread,
+       and the two conditions would then disagree. */
+    .experience.is-reading.is-single-page .page-navigation {
+      top: auto;
+      bottom: clamp(14px, 3.4vh, 34px);
+      align-items: flex-end;
+      padding: 0 14px;
+    }
+
+    .experience.is-reading.is-single-page .page-status {
+      position: static;
+      transform: none;
     }
   </style>
   <script type="importmap">
@@ -6503,8 +6506,11 @@
         ? `${pad(position + 1)} / ${pad(total)}`
         : "Click book to open";
       // Open cover, quiet interface: the editorial panel steps aside and only
-      // close, the page buttons, and the page line remain.
+      // close, the page buttons, and the page line remain. The single-page
+      // state is published as a class so the controls move on the same measured
+      // condition the framing uses, rather than on a width that can disagree.
       experience.classList.toggle("is-reading", mode === "detail" && readingOpen);
+      experience.classList.toggle("is-single-page", singlePage);
       syncReadingSpreadWidth();
       const activePassage = getActivePassage(book);
       passageQuote.hidden = !activePassage;
