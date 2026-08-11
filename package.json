@@ -5,7 +5,8 @@
   "description": "The Third Shelf — deploy tooling only; the site itself is a single index.html",
   "scripts": {
     "deploy": "./deploy.sh",
-    "deploy:dry-run": "./deploy.sh --dry-run"
+    "deploy:dry-run": "./deploy.sh --dry-run",
+    "check:mobile": "node scripts/mobile-check.mjs"
   },
   "devDependencies": {
     "wrangler": "4.120.0"
