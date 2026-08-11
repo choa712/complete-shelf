@@ -6077,13 +6077,18 @@
     // A unit can await - the cover fetches its artwork - so every loop over them
     // re-checks that the volume is still wanted before touching it again.
     async function drainDressing(rig) {
+      const generation = rig.dressingGeneration;
       const units = dressingQueue.get(rig);
       if (!units) return;
       while (units.length) {
         await units.shift()();
-        if (suspended || !rig.dressing) return;
+        // Released, or released and chosen again during the await. In the second
+        // case rig.dressing is truthy but it is somebody else's, and so is the
+        // queue entry - which is why the generation is checked and not just the
+        // dressing, and why the entry is only removed if it is still this one.
+        if (suspended || !rig.dressing || rig.dressingGeneration !== generation) return;
       }
-      dressingQueue.delete(rig);
+      if (dressingQueue.get(rig) === units) dressingQueue.delete(rig);
       requestFrame();
     }
 
@@ -7096,8 +7101,14 @@
 
     // Moves the camera along the line it already sits on, so zooming never
     // changes what is centred - the orbit target stays where the reader put it.
+    // Whether the reader has moved the camera from the pose the volume opened
+    // in. A resize reframes the volume either way, but it only puts the camera
+    // back when nobody has put it somewhere on purpose.
+    let cameraAdjusted = false;
+
     function zoomBy(delta) {
       if (mode !== "detail" || !controls || !camera) return;
+      cameraAdjusted = true;
       const toCamera = camera.position.clone().sub(controls.target);
       const distance = clamp(
         toCamera.length() * (1 + delta),
@@ -8097,6 +8108,7 @@
       experience.classList.add("mode-detail", "is-opening");
       // A volume opens showing itself, not its description.
       setSheetOpen(false);
+      cameraAdjusted = false;
       pointerLabel.setAttribute("aria-hidden", "true");
       setHovered(-1);
 
@@ -8355,6 +8367,7 @@
 
     function resetInspectionView() {
       if (mode !== "detail") return;
+      cameraAdjusted = false;
       camera.position.copy(inspectCameraPosition);
       controls.target.copy(inspectCameraTarget);
       controls.update();
@@ -8684,7 +8697,10 @@
         currentViewOffsetX = readingOpen ? getReadingViewOffsetX() : detailViewOffsetX;
         applyDetailViewOffset();
         updatePageControls(false);
-        if (widthChanged) resetInspectionView();
+        // Rotating is a width change, and it used to throw away a zoom the same
+        // way a URL bar did. The volume still reframes above; only the camera
+        // is left alone, and only when the reader has moved it.
+        if (widthChanged && !cameraAdjusted) resetInspectionView();
       }
       requestFrame();
     }
@@ -8919,6 +8935,10 @@
       controls.maxPolarAngle = Math.PI * 0.76;
       controls.target.copy(shelfCameraTarget);
       controls.addEventListener("change", requestFrame);
+      // "start" only fires for a gesture, where "change" also fires for every
+      // programmatic update - including the reframing this flag is meant to
+      // decide about, which would make it always true.
+      controls.addEventListener("start", () => { cameraAdjusted = true; });
 
       RectAreaLightUniformsLib.init();
       addRoom();

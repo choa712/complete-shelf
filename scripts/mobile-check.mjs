@@ -248,14 +248,35 @@ async function checkCameraAcrossResize({ send, evaluate }) {
   }
   await sleep(900);
   const before = JSON.parse(await evaluate("JSON.stringify(window.__cameraState())"));
+  const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+
   // Height only: exactly what browser chrome sliding away looks like.
   await send("Emulation.setDeviceMetricsOverride", { ...VIEWPORT, height: 760 });
   await sleep(1500);
-  const after = JSON.parse(await evaluate("JSON.stringify(window.__cameraState())"));
+  const afterChrome = JSON.parse(await evaluate("JSON.stringify(window.__cameraState())"));
   await send("Emulation.setDeviceMetricsOverride", VIEWPORT);
-  const moved = Math.hypot(before.x - after.x, before.y - after.y, before.z - after.z);
-  record("camera-survives-resize", moved < 0.02,
-    `camera moved ${moved.toFixed(4)} world units on a height-only resize`);
+  await sleep(1200);
+
+  // And rotation, which is a width change - the case a width-only guard misses,
+  // and the one the reader is most likely to notice, since turning the phone is
+  // a thing people do on purpose while looking at something.
+  await send("Emulation.setDeviceMetricsOverride", {
+    ...VIEWPORT, width: VIEWPORT.height, height: VIEWPORT.width
+  });
+  await sleep(1800);
+  const afterRotation = JSON.parse(await evaluate("JSON.stringify(window.__cameraState())"));
+  await send("Emulation.setDeviceMetricsOverride", VIEWPORT);
+  await sleep(1200);
+
+  const chromeMoved = distance(before, afterChrome);
+  const rotationMoved = distance(before, afterRotation);
+  const problems = [];
+  if (chromeMoved >= 0.02) problems.push(`browser chrome moved it ${chromeMoved.toFixed(4)}`);
+  if (rotationMoved >= 0.02) problems.push(`rotation moved it ${rotationMoved.toFixed(4)}`);
+  record("camera-survives-resize", problems.length === 0,
+    problems.length
+      ? problems.join("; ")
+      : "held through a chrome collapse and a rotation");
 }
 
 // The shelf builds its volumes out of canvases, and building all of them at
