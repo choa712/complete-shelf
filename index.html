@@ -5943,6 +5943,7 @@
           rig.coverArt.color.setHex(0xffffff);
         },
         () => {
+          if (!current()) return;
           const foil = makeFoilTexture(book);
           rig.dressing.foil = foil;
           rig.dressing.foilEmboss = makeEmbossMap(foil, `${book.id}-front-foil-emboss`);
@@ -5951,11 +5952,13 @@
           rig.foilArt.bumpMap = rig.dressing.foilEmboss;
         },
         () => {
+          if (!current()) return;
           rig.dressing.back = makeBackCoverTexture(book);
           rig.backArt.map = rig.dressing.back;
           rig.backArt.color.setHex(0xffffff);
         },
         () => {
+          if (!current()) return;
           const foil = makeBackFoilTexture(book);
           rig.dressing.backFoil = foil;
           rig.dressing.backFoilEmboss = makeEmbossMap(foil, `${book.id}-back-foil-emboss`);
@@ -5964,6 +5967,7 @@
           rig.backFoilArt.bumpMap = rig.dressing.backFoilEmboss;
         },
         () => {
+          if (!current()) return;
           rig.dressing.endpaper = makeEndpaperTexture(book);
           rig.endpaperMaterial.map = rig.dressing.endpaper;
         }

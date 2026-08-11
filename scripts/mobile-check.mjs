@@ -49,7 +49,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function serve() {
   const server = createServer(async (req, res) => {
-    const requested = resolve(ROOT, `.${decodeURIComponent(req.url.split("?")[0])}`);
+    let requested;
+    try {
+      // Outside the try below, a malformed escape here is a URIError that
+      // rejects the handler and takes the whole run down with it.
+      requested = resolve(ROOT, `.${decodeURIComponent(req.url.split("?")[0])}`);
+    } catch {
+      res.writeHead(400).end("bad request");
+      return;
+    }
     // join() happily normalises ../.. straight out of the repo, and this server
     // runs on a predictable localhost port while a browser is pointed at it.
     if (requested !== ROOT && !requested.startsWith(`${ROOT}/`)) {
