@@ -5926,15 +5926,18 @@
 
     function dressingUnits(rig) {
       const book = rig.data;
+      // Which dressing this work belongs to. A volume released and chosen again
+      // during a slow decode has a new one, and checking only that some dressing
+      // exists would let the old work write into it - orphaning the texture the
+      // new work had already put there, undisposed.
+      const generation = rig.dressingGeneration;
+      const current = () => rig.dressing && rig.dressingGeneration === generation;
       const units = [
         async () => {
           // makeCoverTexture reads the decoded image out of the cache, so the
           // fetch has to land first.
           await coverImageFor(book);
-          // A fetch is long enough for the shelf to move on and this volume to
-          // be undressed. The caller checks that too, but not until the unit
-          // has already returned - which is too late to stop it writing.
-          if (!rig.dressing) return;
+          if (!current()) return;
           rig.dressing.cover = makeCoverTexture(book);
           rig.coverArt.map = rig.dressing.cover;
           rig.coverArt.color.setHex(0xffffff);
@@ -5969,6 +5972,7 @@
       for (let leaf = 0; leaf < rig.paginatedLeafCount * 2; leaf += 1) {
         const index = leaf;
         units.push(() => {
+          if (!current()) return;
           const next = rig.leafSequence.next();
           if (next.done) return;
           rig.leaves[index] = next.value;
@@ -6005,6 +6009,9 @@
       rig.dressing = null;
       rig.leaves = null;
       rig.leafSequence = null;
+      // Anything still in flight from this dressing belongs to a volume that is
+      // no longer wearing it.
+      rig.dressingGeneration = (rig.dressingGeneration || 0) + 1;
     }
 
     function touchDressed(rig) {
@@ -6030,6 +6037,7 @@
       touchDressed(rig);
       if (!rig.dressing) {
         rig.dressing = {};
+        rig.dressingGeneration = (rig.dressingGeneration || 0) + 1;
         rig.leaves = [];
         rig.leafSequence = interiorPageTextureSequence(rig.data);
         dressingQueue.set(rig, dressingUnits(rig));

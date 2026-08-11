@@ -6,7 +6,7 @@
 
 **Architecture:** Everything lands in the single `index.html`. A checked-in headless-Chrome harness (`scripts/mobile-check.mjs`) replaces the test framework this repo does not have: it drives the page over CDP at a phone viewport and asserts on measured facts — load timing, touch-target sizes, camera state across a resize. Each task ends by running it.
 
-**Tech Stack:** Vanilla HTML/CSS/ES modules, Three.js 0.165 via importmap, Node 20 + `ws` (already a transitive dependency of wrangler) for the harness, headless Chrome over the DevTools Protocol.
+**Tech Stack:** Vanilla HTML/CSS/ES modules, Three.js 0.165 via importmap, headless Chrome over the DevTools Protocol. The harness needs **Node 21 or newer** and no dependencies — it uses the WebSocket built into Node rather than the `ws` package, which is only present as a transitive dependency of wrangler and would take the script with it the day that changes.
 
 **Spec:** `docs/superpowers/specs/2026-08-11-mobile-detail-view-design.md`
 

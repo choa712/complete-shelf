@@ -237,9 +237,33 @@ async function checkMemory({ evaluate }) {
     return;
   }
 
+  // navigate() returns immediately unless the shelf is the active mode, so the
+  // walk has to start from the shelf or it silently does nothing and the check
+  // passes on a build that never cycled a volume.
+  await evaluate('document.getElementById("close-detail")?.click()');
+  await sleep(3500);
+  const onShelf = await evaluate('!document.getElementById("experience").classList.contains("mode-detail")');
+  if (!onShelf) {
+    record("memory-budget", false, "could not return to the shelf to walk the volumes");
+    return;
+  }
+
   const before = JSON.parse(await evaluate("JSON.stringify(window.__rendererInfo())"));
-  // Every volume in turn, which is the walk that made the old build climb.
-  for (let i = 0; i < 26; i += 1) {
+  const startedAt = await evaluate('document.getElementById("counter")?.textContent');
+
+  // Proven on the first step rather than the last: a full lap of 26 lands back
+  // on the volume it started from, so comparing the ends cannot tell a walk
+  // from a stall.
+  await evaluate('document.getElementById("next")?.click()');
+  await sleep(600);
+  const afterOne = await evaluate('document.getElementById("counter")?.textContent');
+  if (startedAt === afterOne) {
+    record("memory-budget", false, `the walk never moved: counter stayed at ${startedAt}`);
+    return;
+  }
+
+  // The rest of the lap, so every volume has been dressed at least once.
+  for (let i = 1; i < 26; i += 1) {
     await evaluate('document.getElementById("next")?.click()');
     await sleep(320);
   }
