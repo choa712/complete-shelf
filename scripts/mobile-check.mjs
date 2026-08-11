@@ -1,0 +1,242 @@
+#!/usr/bin/env node
+// Measures the phone experience over the DevTools Protocol.
+//
+// This repo has no test framework, and the things that break on a phone are all
+// invisible in a diff: a fallback catalog that shows during a normal load, a
+// control too small to hit, a camera thrown away by a URL bar sliding up. None
+// of them fail a build. So they get measured instead.
+//
+//   node scripts/mobile-check.mjs            local server, table output
+//   node scripts/mobile-check.mjs --json     machine-readable
+//   node scripts/mobile-check.mjs --url URL  measure a deployed build
+//
+// Exits non-zero if any check fails.
+// Uses the WebSocket built into Node (22+) rather than the `ws` package, which
+// is only present here as a transitive dependency of wrangler and would take
+// this script with it the day that changes.
+import { spawn } from "node:child_process";
+import { createServer } from "node:http";
+import { readFile, stat } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { extname, join, resolve } from "node:path";
+
+const ROOT = resolve(import.meta.dirname, "..");
+const PORT = 8910;
+const CDP_PORT = 9360;
+const VIEWPORT = { width: 390, height: 844, deviceScaleFactor: 3, mobile: true };
+const TYPES = {
+  ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css",
+  ".webp": "image/webp", ".jpg": "image/jpeg", ".png": "image/png", ".svg": "image/svg+xml"
+};
+const CHROME = process.env.CHROME_PATH || (process.platform === "darwin"
+  ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+  : "google-chrome");
+
+const args = process.argv.slice(2);
+const urlArg = args.includes("--url") ? args[args.indexOf("--url") + 1] : null;
+const asJson = args.includes("--json");
+
+const checks = [];
+const record = (name, ok, detail) => checks.push({ name, ok, detail });
+const skip = (name, detail) => checks.push({ name, ok: null, detail });
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function serve() {
+  const server = createServer(async (req, res) => {
+    const requested = join(ROOT, decodeURIComponent(req.url.split("?")[0]));
+    try {
+      const info = await stat(requested);
+      const file = info.isDirectory() ? join(requested, "index.html") : requested;
+      const body = await readFile(file);
+      res.writeHead(200, { "content-type": TYPES[extname(file)] || "application/octet-stream" });
+      res.end(body);
+    } catch {
+      res.writeHead(404).end("not found");
+    }
+  });
+  await new Promise((r) => server.listen(PORT, "127.0.0.1", r));
+  return server;
+}
+
+async function waitForTab() {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    try {
+      const r = await fetch(`http://127.0.0.1:${CDP_PORT}/json/new?about:blank`, { method: "PUT" });
+      if (r.ok) return r.json();
+    } catch { /* chrome is still coming up */ }
+    await sleep(250);
+  }
+  throw new Error("Chrome never answered on the debugging port");
+}
+
+async function connect() {
+  const chrome = spawn(CHROME, [
+    "--headless=new", `--remote-debugging-port=${CDP_PORT}`,
+    `--user-data-dir=${join(tmpdir(), "shelf-mobile-check")}`,
+    "--no-first-run", "about:blank"
+  ], { stdio: "ignore" });
+  chrome.on("error", (error) => {
+    console.error(`Could not start Chrome at ${CHROME}: ${error.message}`);
+    console.error("Set CHROME_PATH to override.");
+    process.exit(1);
+  });
+
+  const tab = await waitForTab();
+  const ws = new WebSocket(tab.webSocketDebuggerUrl);
+  let id = 0;
+  const pending = new Map();
+  const problems = [];
+  ws.addEventListener("message", (event) => {
+    const m = JSON.parse(typeof event.data === "string" ? event.data : String(event.data));
+    if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); }
+    if (m.method === "Runtime.exceptionThrown") {
+      problems.push(m.params.exceptionDetails.exception?.description
+        || m.params.exceptionDetails.text);
+    }
+    if (m.method === "Runtime.consoleAPICalled" && ["error", "warning"].includes(m.params.type)) {
+      problems.push(`${m.params.type}: ${m.params.args
+        .map((a) => a.value ?? a.description).join(" ")}`);
+    }
+  });
+  const send = (method, params = {}) => new Promise((res) => {
+    const i = ++id; pending.set(i, res);
+    ws.send(JSON.stringify({ id: i, method, params }));
+  });
+  await new Promise((r) => ws.addEventListener("open", r, { once: true }));
+  const evaluate = async (expression) => {
+    const r = await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
+    if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.text);
+    return r.result?.result?.value;
+  };
+  return { send, evaluate, problems, close: () => { ws.close(); chrome.kill(); } };
+}
+
+// A fallback that is right to show when WebGL is dead is wrong to show while
+// WebGL is still starting. Sample the whole load, not the end of it.
+async function checkLoad({ send, evaluate }, url) {
+  const readState = () => evaluate(`JSON.stringify({
+    fallback: (() => { const f = document.querySelector(".static-fallback");
+      return f ? getComputedStyle(f).display : "absent"; })(),
+    loading: document.getElementById("loading")?.hidden ?? null,
+    ready: document.getElementById("experience")?.classList.contains("webgl-ready") ?? false
+  })`);
+
+  send("Page.navigate", { url });
+  let fallbackSeenAt = null;
+  let indicatorAt = null;
+  let readyAt = null;
+  const started = Date.now();
+  while (Date.now() - started < 40000) {
+    await sleep(200);
+    const at = Date.now() - started;
+    let state;
+    try { state = JSON.parse(await readState()); } catch { continue; }
+    if (state.fallback === "grid" && fallbackSeenAt === null) fallbackSeenAt = at;
+    if (state.loading === false && indicatorAt === null) indicatorAt = at;
+    if (state.ready) { readyAt = at; break; }
+  }
+
+  record("load-no-fallback", fallbackSeenAt === null,
+    fallbackSeenAt === null ? "catalog never shown" : `catalog shown from t+${fallbackSeenAt}ms`);
+  record("load-indicator-early", indicatorAt !== null && indicatorAt <= 1000,
+    indicatorAt === null ? "loading indicator never shown" : `loading indicator at t+${indicatorAt}ms`);
+  return readyAt;
+}
+
+async function checkTouchTargets({ evaluate }) {
+  const small = await evaluate(`(() => {
+    const ids = ["close-detail", "toggle-book", "reset-view", "previous-page", "next-page",
+                 "zoom-in", "zoom-out", "reset-camera", "sheet-handle", "close-book"];
+    return ids.flatMap((id) => {
+      const el = document.getElementById(id);
+      if (!el || el.hidden || el.offsetParent === null) return [];
+      const box = el.getBoundingClientRect();
+      if (box.width === 0 && box.height === 0) return [];
+      return (box.width < 44 || box.height < 44)
+        ? [id + " " + Math.round(box.width) + "x" + Math.round(box.height)] : [];
+    });
+  })()`);
+  record("touch-targets", small.length === 0,
+    small.length ? `below 44px: ${small.join(", ")}` : "every visible target >= 44px");
+}
+
+// A mobile URL bar collapsing fires resize. If that throws the camera away, the
+// zoom the reader just set is gone - which is experienced as "zoom is broken".
+async function checkCameraAcrossResize({ send, evaluate }) {
+  const hooked = await evaluate('typeof window.__zoomBy === "function" && typeof window.__cameraState === "function"');
+  if (!hooked) {
+    skip("camera-survives-resize", "debug hooks absent (added in the camera task)");
+    return;
+  }
+  await evaluate("window.__select(4)"); await sleep(2500);
+  await evaluate("window.__open()"); await sleep(4500);
+  await evaluate("window.__zoomBy(-0.6)"); await sleep(1200);
+  const before = JSON.parse(await evaluate("JSON.stringify(window.__cameraState())"));
+  // Height only: exactly what browser chrome sliding away looks like.
+  await send("Emulation.setDeviceMetricsOverride", { ...VIEWPORT, height: 760 });
+  await sleep(1500);
+  const after = JSON.parse(await evaluate("JSON.stringify(window.__cameraState())"));
+  await send("Emulation.setDeviceMetricsOverride", VIEWPORT);
+  const moved = Math.hypot(before.x - after.x, before.y - after.y, before.z - after.z);
+  record("camera-survives-resize", moved < 0.02,
+    `camera moved ${moved.toFixed(4)} world units on a height-only resize`);
+}
+
+async function checkMemory({ evaluate }) {
+  const peek = await evaluate('typeof window.__peek === "function"');
+  if (!peek) {
+    skip("memory-budget", "instrumented build not in use");
+    return;
+  }
+  const info = JSON.parse(await evaluate("JSON.stringify(window.__peek())"));
+  record("memory-budget", info.textures < 260,
+    `${info.textures} textures resident, ${info.programs} programs`);
+}
+
+async function main() {
+  const server = urlArg ? null : await serve();
+  const url = urlArg || `http://127.0.0.1:${PORT}/index.html`;
+  const session = await connect();
+  try {
+    await session.send("Runtime.enable");
+    await session.send("Page.enable");
+    await session.send("Network.enable");
+    await session.send("Emulation.setDeviceMetricsOverride", VIEWPORT);
+    // Throttled, or the load phase is over before it can be sampled. The
+    // network matters as much as the CPU here: the loading indicator is only
+    // late because the code that reveals it is inside the module, and on a fast
+    // line the module arrives before anyone could notice.
+    await session.send("Emulation.setCPUThrottlingRate", { rate: 4 });
+    await session.send("Network.emulateNetworkConditions", {
+      offline: false, latency: 150,
+      downloadThroughput: 1.6e6 / 8, uploadThroughput: 750e3 / 8
+    });
+
+    const readyAt = await checkLoad(session, url);
+    if (readyAt === null) {
+      record("console-clean", false, "the shelf never became ready");
+    } else {
+      await checkTouchTargets(session);
+      await checkCameraAcrossResize(session);
+      await checkMemory(session);
+      record("console-clean", session.problems.length === 0,
+        session.problems.length ? session.problems.slice(0, 5).join(" | ") : "no errors or warnings");
+    }
+    if (readyAt !== null) skip("time-to-ready", `${readyAt}ms at 4x CPU throttling`);
+  } finally {
+    session.close();
+    server?.close();
+  }
+
+  if (asJson) {
+    console.log(JSON.stringify(checks, null, 2));
+  } else {
+    for (const check of checks) {
+      const mark = check.ok === null ? "····" : check.ok ? "PASS" : "FAIL";
+      console.log(`${mark}  ${check.name.padEnd(24)} ${check.detail}`);
+    }
+  }
+  process.exit(checks.some((check) => check.ok === false) ? 1 : 0);
+}
+
+main();
