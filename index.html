@@ -813,11 +813,14 @@
       opacity: 0;
     }
 
+    /* The catalog answers "this browser cannot run the shelf". That is not the
+       same question as "the shelf is still starting", so it waits to be asked
+       rather than standing in front of every load. */
     .static-fallback {
       position: absolute;
       inset: 0;
       z-index: 14;
-      display: grid;
+      display: none;
       grid-template-rows: auto 1fr auto;
       gap: 28px;
       padding: 48px;
@@ -827,8 +830,8 @@
         var(--paper);
     }
 
-    .webgl-ready .static-fallback {
-      display: none;
+    .webgl-failed .static-fallback {
+      display: grid;
     }
 
     .fallback__header {
@@ -1143,6 +1146,31 @@
 
       .fallback__status {
         text-align: left;
+      }
+
+      /* The grid is authored at a shelf's width - min-width: 1050px - which on a
+         phone runs the volumes off the right edge and clips the title. The
+         column minimum has to be wide enough to hold a section name, or the row
+         simply stays a row and clips it instead: "Schopenhauer" becomes "Schop". */
+      .fallback__grid {
+        grid-template-columns: repeat(auto-fit, minmax(136px, 1fr));
+        align-content: center;
+        min-width: 0;
+        gap: 10px;
+        padding: 18px 0;
+      }
+
+      .fallback-book {
+        min-height: 132px;
+        padding: 14px;
+      }
+
+      .fallback-book strong {
+        overflow-wrap: anywhere;
+      }
+
+      #fallback-title {
+        font-size: clamp(1.6rem, 7vw, 2.4rem);
       }
     }
 
@@ -2199,12 +2227,34 @@
       </div>
     </section>
 
-    <div class="loading" id="loading" hidden aria-live="polite">
+    <div class="loading" id="loading" aria-live="polite">
       <div class="loading__inner">
         <div class="loading__mark" aria-hidden="true"></div>
         <p>Binding the collection</p>
       </div>
     </div>
+
+    <noscript>
+      <style>
+        #loading { display: none; }
+        .static-fallback { display: grid; }
+      </style>
+    </noscript>
+    <script>
+      // Two ways the shelf can fail to arrive that the shelf itself cannot
+      // report, because in both of them its code never runs: the module is
+      // blocked - a proxy that eats importmaps, a CDN that does not answer -
+      // or the browser is too old for modules. Past the point where a working
+      // load would have finished, hand over to the catalog.
+      window.setTimeout(function () {
+        var experience = document.getElementById("experience");
+        if (!experience || experience.classList.contains("webgl-ready")) return;
+        experience.classList.add("webgl-failed");
+        document.getElementById("loading").hidden = true;
+        document.getElementById("fallback-status").textContent =
+          "The interactive shelf did not finish loading. The complete static catalog remains available.";
+      }, 25000);
+    </script>
   </main>
 
   <script type="module">
@@ -3213,8 +3263,6 @@
     const pointerLabelKo = document.querySelector("#pointer-label-ko");
     const pointerLabelMeta = document.querySelector("#pointer-label-meta");
     const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-
-    loading.hidden = false;
 
     const clamp = THREE.MathUtils.clamp;
     const damp = THREE.MathUtils.damp;
@@ -8445,6 +8493,7 @@
     function showFallback(message) {
       loading.hidden = true;
       experience.classList.remove("webgl-ready");
+      experience.classList.add("webgl-failed");
       fallbackStatus.textContent = message;
     }
 
