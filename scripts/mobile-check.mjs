@@ -11,9 +11,10 @@
 //   node scripts/mobile-check.mjs --url URL  measure a deployed build
 //
 // Exits non-zero if any check fails.
-// Uses the WebSocket built into Node (22+) rather than the `ws` package, which
-// is only present here as a transitive dependency of wrangler and would take
-// this script with it the day that changes.
+// Uses the WebSocket built into Node rather than the `ws` package, which is
+// only present here as a transitive dependency of wrangler and would take this
+// script with it the day that changes. That global landed in Node 21, so say so
+// here instead of failing with a bare ReferenceError forty lines in.
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
@@ -31,6 +32,11 @@ const TYPES = {
 const CHROME = process.env.CHROME_PATH || (process.platform === "darwin"
   ? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
   : "google-chrome");
+
+if (typeof WebSocket !== "function") {
+  console.error(`Node ${process.versions.node} has no global WebSocket; this needs Node 21 or newer.`);
+  process.exit(1);
+}
 
 const args = process.argv.slice(2);
 const urlArg = args.includes("--url") ? args[args.indexOf("--url") + 1] : null;
@@ -157,21 +163,36 @@ async function enterDetail({ evaluate }) {
   return evaluate('document.getElementById("experience")?.classList.contains("mode-detail") ?? false');
 }
 
+const MEASURE_TARGETS = `(() => {
+  const ids = ["close-detail", "toggle-book", "reset-view", "previous-page", "next-page",
+               "zoom-in", "zoom-out", "reset-camera", "sheet-handle", "close-book"];
+  return ids.flatMap((id) => {
+    const el = document.getElementById(id);
+    if (!el || el.hidden || el.offsetParent === null) return [];
+    const box = el.getBoundingClientRect();
+    if (box.width === 0 && box.height === 0) return [];
+    return (box.width < 44 || box.height < 44)
+      ? [id + " " + Math.round(box.width) + "x" + Math.round(box.height)] : [];
+  });
+})()`;
+
+// Both states, because they show different controls. Close book and the page
+// arrows only exist once the covers are open, so measuring the closed book
+// alone reports a clean pass over controls it never looked at.
 async function checkTouchTargets({ evaluate }) {
-  const small = await evaluate(`(() => {
-    const ids = ["close-detail", "toggle-book", "reset-view", "previous-page", "next-page",
-                 "zoom-in", "zoom-out", "reset-camera", "sheet-handle", "close-book"];
-    return ids.flatMap((id) => {
-      const el = document.getElementById(id);
-      if (!el || el.hidden || el.offsetParent === null) return [];
-      const box = el.getBoundingClientRect();
-      if (box.width === 0 && box.height === 0) return [];
-      return (box.width < 44 || box.height < 44)
-        ? [id + " " + Math.round(box.width) + "x" + Math.round(box.height)] : [];
-    });
-  })()`);
+  const closed = await evaluate(MEASURE_TARGETS);
+  await evaluate('document.getElementById("toggle-book")?.click()');
+  await sleep(4000);
+  const reading = await evaluate('document.getElementById("experience")?.classList.contains("is-reading") ?? false');
+  const open = reading ? await evaluate(MEASURE_TARGETS) : ["(could not open the book to measure)"];
+  await evaluate('document.getElementById("close-book")?.click()');
+  await sleep(2500);
+
+  const small = [...new Set([...closed, ...open])];
   record("touch-targets", small.length === 0,
-    small.length ? `below 44px: ${small.join(", ")}` : "every visible target >= 44px");
+    small.length
+      ? `below 44px: ${small.join(", ")}`
+      : "every visible target >= 44px, covers closed and open");
 }
 
 // A mobile URL bar collapsing fires resize. If that throws the camera away, the
@@ -200,15 +221,43 @@ async function checkCameraAcrossResize({ send, evaluate }) {
     `camera moved ${moved.toFixed(4)} world units on a height-only resize`);
 }
 
+// The shelf builds its volumes out of canvases, and building all of them at
+// once is what used to kill the tab. Two things have to stay true: the resident
+// canvas bytes stay under budget, and swapping a volume's dressing swaps a
+// texture rather than changing a material's shape - a changed shape recompiles
+// every material on the book, which shows up as the program count climbing.
+const MEMORY_BUDGET_MB = 150;
+
 async function checkMemory({ evaluate }) {
-  const peek = await evaluate('typeof window.__peek === "function"');
-  if (!peek) {
-    skip("memory-budget", "instrumented build not in use");
+  const census = await evaluate('typeof window.__canvasCensus === "function"');
+  const info = await evaluate('typeof window.__rendererInfo === "function"');
+  if (!census || !info) {
+    record("memory-budget", false,
+      "the page exposes no renderer info, or the census was not installed");
     return;
   }
-  const info = JSON.parse(await evaluate("JSON.stringify(window.__peek())"));
-  record("memory-budget", info.textures < 260,
-    `${info.textures} textures resident, ${info.programs} programs`);
+
+  const before = JSON.parse(await evaluate("JSON.stringify(window.__rendererInfo())"));
+  // Every volume in turn, which is the walk that made the old build climb.
+  for (let i = 0; i < 26; i += 1) {
+    await evaluate('document.getElementById("next")?.click()');
+    await sleep(320);
+  }
+  await sleep(4000);
+  const after = JSON.parse(await evaluate("JSON.stringify(window.__rendererInfo())"));
+  const resident = JSON.parse(await evaluate("JSON.stringify(window.__canvasCensus())"));
+
+  const problems = [];
+  if (resident.rgbaMB > MEMORY_BUDGET_MB) {
+    problems.push(`${resident.rgbaMB} MB resident, over ${MEMORY_BUDGET_MB}`);
+  }
+  if (after.programs !== before.programs) {
+    problems.push(`programs ${before.programs} -> ${after.programs}`);
+  }
+  record("memory-budget", problems.length === 0,
+    problems.length
+      ? problems.join("; ")
+      : `${resident.rgbaMB} MB across ${resident.live} canvases, programs steady at ${after.programs}`);
 }
 
 async function main() {
@@ -219,6 +268,31 @@ async function main() {
     await session.send("Runtime.enable");
     await session.send("Page.enable");
     await session.send("Network.enable");
+    // Installed before any page script runs, so it sees every canvas the shelf
+    // makes. WeakRef, or the census itself would keep the released ones alive
+    // and report the total ever made instead of the total resident.
+    await session.send("Page.addScriptToEvaluateOnNewDocument", {
+      source: `(() => {
+        const create = document.createElement.bind(document);
+        const seen = [];
+        document.createElement = function (tag) {
+          const el = create(tag);
+          if (String(tag).toLowerCase() === "canvas") seen.push(new WeakRef(el));
+          return el;
+        };
+        window.__canvasCensus = () => {
+          let px = 0;
+          let live = 0;
+          for (const ref of seen) {
+            const canvas = ref.deref();
+            if (!canvas) continue;
+            live += 1;
+            px += canvas.width * canvas.height;
+          }
+          return { made: seen.length, live, rgbaMB: +(px * 4 / 1048576).toFixed(1) };
+        };
+      })();`
+    });
     await session.send("Emulation.setDeviceMetricsOverride", VIEWPORT);
     // Throttled, or the load phase is over before it can be sampled. The
     // network matters as much as the CPU here: the loading indicator is only

@@ -1984,8 +1984,10 @@
       }
 
       /* Forty-four is the smallest square a thumb reliably hits. Open book and
-         Reset view were thirty-two tall with no padding at all. */
-      .camera-rail .page-button {
+         Reset view were thirty-two tall with no padding at all, and the page
+         arrows - the control a reader touches more than any other on a phone -
+         were forty. */
+      .page-button {
         width: 44px;
         height: 44px;
       }
@@ -8997,10 +8999,19 @@
       console.error("[shelf-init]", error);
       showFallback("The interactive shelf could not be prepared. The complete static catalog remains available.");
     });
-    // Read-only, for the measurement harness: whether a resize moved the camera
-    // is not a question the page can be asked from the outside otherwise.
+    // Read-only, for the measurement harness. Whether a resize moved the camera,
+    // and whether swapping a volume's dressing recompiled its materials, are not
+    // questions the page can be asked from the outside otherwise.
     window.__cameraState = () => (camera
       ? { x: camera.position.x, y: camera.position.y, z: camera.position.z }
+      : null);
+    window.__rendererInfo = () => (renderer
+      ? {
+          programs: renderer.info.programs?.length ?? -1,
+          textures: renderer.info.memory.textures,
+          geometries: renderer.info.memory.geometries,
+          dressed: dressedOrder.length
+        }
       : null);
     window.addEventListener("beforeunload", disposeExperience, { once: true });
   </script>
