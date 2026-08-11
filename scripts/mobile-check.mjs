@@ -22,8 +22,11 @@ import { tmpdir } from "node:os";
 import { extname, join, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
-const PORT = 8910;
-const CDP_PORT = 9360;
+// Per run, so two checks can be in flight without attaching to each other's
+// browser - where whichever finished first would kill Chrome out from under
+// the other and leave it waiting on promises nobody can answer.
+const RUN = String(process.pid);
+const CDP_PORT = 9300 + (process.pid % 600);
 const VIEWPORT = { width: 390, height: 844, deviceScaleFactor: 3, mobile: true };
 const TYPES = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css",
@@ -74,7 +77,7 @@ async function serve() {
       res.writeHead(404).end("not found");
     }
   });
-  await new Promise((r) => server.listen(PORT, "127.0.0.1", r));
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
   return server;
 }
 
@@ -92,7 +95,7 @@ async function waitForTab() {
 async function connect() {
   const chrome = spawn(CHROME, [
     "--headless=new", `--remote-debugging-port=${CDP_PORT}`,
-    `--user-data-dir=${join(tmpdir(), "shelf-mobile-check")}`,
+    `--user-data-dir=${join(tmpdir(), "shelf-mobile-check-" + RUN)}`,
     "--no-first-run", "about:blank"
   ], { stdio: "ignore" });
   chrome.on("error", (error) => {
@@ -133,6 +136,14 @@ async function connect() {
     ws.send(JSON.stringify({ id: i, method, params }));
   });
   await new Promise((r) => ws.addEventListener("open", r, { once: true }));
+  // A socket that closes with calls outstanding has to answer them, or the
+  // run hangs waiting on a browser that is already gone.
+  ws.addEventListener("close", () => {
+    for (const settle of pending.values()) {
+      settle({ error: { message: "the browser went away" } });
+    }
+    pending.clear();
+  });
   const evaluate = async (expression) => {
     const r = await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
     if (r.result?.exceptionDetails) throw new Error(r.result.exceptionDetails.text);
@@ -312,7 +323,7 @@ async function checkMemory({ evaluate }) {
 
 async function main() {
   const server = urlArg ? null : await serve();
-  const url = urlArg || `http://127.0.0.1:${PORT}/index.html`;
+  const url = urlArg || `http://127.0.0.1:${server.address().port}/index.html`;
   const session = await connect();
   try {
     await session.send("Runtime.enable");
