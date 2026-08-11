@@ -3587,6 +3587,57 @@
     let sharedPageEdgeTextures = null;
     let sharedContactShadowTexture = null;
 
+    // Memory is a property of the device, not of the window: a desktop dragged
+    // narrow is still a desktop, and a phone turned sideways is still a phone,
+    // so the screen decides this and not the viewport. Touch and pointer
+    // queries would name a phone more precisely, but they can come back false
+    // on a phone - and the cost of guessing wrong that way is the blank tab
+    // this budget exists to prevent, while the cost of guessing wrong the other
+    // way is a spine sheet nobody can tell apart at the size it is drawn.
+    const SMALL_SCREEN = Math.min(
+      window.screen?.width || window.innerWidth,
+      window.screen?.height || window.innerHeight
+    ) < 820;
+    const DRESSED_VOLUME_BUDGET = SMALL_SCREEN ? 1 : 4;
+    const SPINE_TEXTURE_SCALE = SMALL_SCREEN ? 0.5 : 1;
+    // The sheet the spine artwork is drawn at, whatever it is printed onto.
+    const SPINE_W = 384;
+    const SPINE_H = 1536;
+
+    // A volume that has not been dressed yet still has to keep the shape of its
+    // shader, so no map slot is ever left empty - only refilled with one pixel.
+    // Swapping a texture for a texture changes a uniform; swapping one for null
+    // changes the program key and recompiles the material.
+    function makePixelTexture(rgba, colorSpace) {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 1;
+      const context = canvas.getContext("2d");
+      const pixel = context.createImageData(1, 1);
+      pixel.data.set(rgba);
+      context.putImageData(pixel, 0, 0);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = colorSpace;
+      texture.generateMipmaps = false;
+      texture.minFilter = THREE.LinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      return texture;
+    }
+
+    // Built lazily so they never run before THREE is imported.
+    let PLACEHOLDER = null;
+    function placeholders() {
+      if (!PLACEHOLDER) {
+        PLACEHOLDER = {
+          // The board colour comes from material.color, so white is neutral.
+          ink: makePixelTexture([255, 255, 255, 255], THREE.SRGBColorSpace),
+          // Alpha zero: a foil plane with no artwork draws nothing at all.
+          clear: makePixelTexture([0, 0, 0, 0], THREE.SRGBColorSpace),
+          flat: makePixelTexture([255, 255, 255, 255], THREE.NoColorSpace)
+        };
+      }
+      return PLACEHOLDER;
+    }
+
     function configureCanvasTexture(texture, {
       color = true,
       anisotropy = 16
@@ -4233,12 +4284,23 @@
 
     const isProseVolume = (book) => Array.isArray(book?.prose) && book.prose.length > 0;
 
+    // The page count decides the leaf count, the spread labels and the page
+    // controls, and all three are wanted before a single leaf is printed.
+    // paginateProse is memoised and draws nothing, so this stays cheap.
+    function interiorLeafCount(book) {
+      if (isProseVolume(book)) return 2 + paginateProse(book).pages.length;
+      return 2 + (Array.isArray(book.passages) ? book.passages.length * 2 : 0);
+    }
+
     // Every volume is paginated the same way: a title page, then one facing
     // pair per passage - the aphorism on the left, a reading of it on the
     // right - and a colophon. Page count follows the number of passages.
     // A prose volume keeps the title page and colophon and flows one piece
     // through everything in between.
-    function makeInteriorPageTextures(book) {
+    // Yields one leaf at a time. Printing a whole volume in one go is a third
+    // of a second of paper grain; yielding per leaf lets the frame loop take it
+    // in slices small enough that nothing stutters.
+    function* interiorPageTextureSequence(book) {
       const passages = isProseVolume(book) || !Array.isArray(book.passages) ? [] : book.passages;
       const prose = isProseVolume(book) ? paginateProse(book) : null;
       const inkColor = new THREE.Color(book.color).lerp(new THREE.Color(0x211b16), 0.62);
@@ -4299,8 +4361,6 @@
         ctx.globalAlpha = 1;
       };
 
-      const textures = [];
-
       // Title page.
       {
         const { canvas, ctx } = makeLeaf("title");
@@ -4332,14 +4392,15 @@
         );
         ctx.letterSpacing = "0px";
         ctx.globalAlpha = 1;
-        textures.push(finishLeaf(canvas, "title"));
+        yield finishLeaf(canvas, "title");
       }
 
       // The prose runs straight through: same column, same measure, same first
       // baseline on every page, so the break between verso and recto is only a
       // break in the paper.
       if (prose) {
-        prose.pages.forEach((lines, pageIndex) => {
+        for (let pageIndex = 0; pageIndex < prose.pages.length; pageIndex += 1) {
+          const lines = prose.pages[pageIndex];
           const { canvas, ctx } = makeLeaf(`prose-${pageIndex}`);
           if (pageIndex === 0) {
             eyebrow(ctx, book.proseTitle || "Prose", 150);
@@ -4368,11 +4429,12 @@
             ctx.fillText(READING_BYLINE, MARGIN, ruleY + 30);
           }
           ctx.globalAlpha = 1;
-          textures.push(finishLeaf(canvas, `prose-${pageIndex}`));
-        });
+          yield finishLeaf(canvas, `prose-${pageIndex}`);
+        }
       }
 
-      passages.forEach((passage, passageIndex) => {
+      for (let passageIndex = 0; passageIndex < passages.length; passageIndex += 1) {
+        const passage = passages[passageIndex];
         // Verso: the passage itself, set large with room around it.
         {
           const { canvas, ctx } = makeLeaf(`passage-${passageIndex}`);
@@ -4413,7 +4475,7 @@
           ctx.stroke();
           ctx.restore();
           ctx.globalAlpha = 1;
-          textures.push(finishLeaf(canvas, `passage-${passageIndex}`));
+          yield finishLeaf(canvas, `passage-${passageIndex}`);
         }
 
         // Recto: the reading, written for this edition.
@@ -4441,9 +4503,9 @@
           ctx.font = '400 15px "Iowan Old Style", Baskerville, Georgia, serif';
           ctx.fillText(READING_BYLINE, MARGIN, ruleY + 30);
           ctx.globalAlpha = 1;
-          textures.push(finishLeaf(canvas, `reading-${passageIndex}`));
+          yield finishLeaf(canvas, `reading-${passageIndex}`);
         }
-      });
+      }
 
       // Colophon.
       {
@@ -4501,10 +4563,8 @@
         ctx.fillText(`SPECIMEN ${book.roman}  ·  IMAGINED EDITION`, MARGIN, logicalHeight - 92);
         ctx.letterSpacing = "0px";
         ctx.globalAlpha = 1;
-        textures.push(finishLeaf(canvas, "colophon"));
+        yield finishLeaf(canvas, "colophon");
       }
-
-      return textures;
     }
 
     function makeContactShadowTexture() {
@@ -4637,31 +4697,38 @@
       return geometry;
     }
 
+    // The spine is the one face every volume shows at once, so all twenty-six
+    // stay printed. On a phone it is about sixty device pixels wide under the
+    // capped pixel ratio, so half the sheet is still several times the light it
+    // will ever be asked for. The drawing keeps its own coordinates.
     function makeSpineTexture(book) {
       const spineCanvas = document.createElement("canvas");
-      spineCanvas.width = 384;
-      spineCanvas.height = 1536;
+      spineCanvas.width = Math.round(SPINE_W * SPINE_TEXTURE_SCALE);
+      spineCanvas.height = Math.round(SPINE_H * SPINE_TEXTURE_SCALE);
       const ctx = spineCanvas.getContext("2d");
+      ctx.scale(SPINE_TEXTURE_SCALE, SPINE_TEXTURE_SCALE);
       const random = seededRandom(hashSeed(`${book.id}-spine-cloth`) + book.seed);
       ctx.fillStyle = book.color;
-      ctx.fillRect(0, 0, spineCanvas.width, spineCanvas.height);
+      ctx.fillRect(0, 0, SPINE_W, SPINE_H);
 
-      const shade = ctx.createLinearGradient(0, 0, spineCanvas.width, 0);
+      const shade = ctx.createLinearGradient(0, 0, SPINE_W, 0);
       shade.addColorStop(0, "rgba(0,0,0,0.2)");
       shade.addColorStop(0.14, "rgba(255,255,255,0.055)");
       shade.addColorStop(0.62, "rgba(255,255,255,0.012)");
       shade.addColorStop(1, "rgba(0,0,0,0.16)");
       ctx.fillStyle = shade;
-      ctx.fillRect(0, 0, spineCanvas.width, spineCanvas.height);
+      ctx.fillRect(0, 0, SPINE_W, SPINE_H);
 
       for (let thread = 0; thread < 1900; thread += 1) {
-        const x = random() * spineCanvas.width;
-        const y = random() * spineCanvas.height;
+        const x = random() * SPINE_W;
+        const y = random() * SPINE_H;
         const vertical = random() > 0.42;
         ctx.strokeStyle = random() > 0.5
           ? `rgba(255,255,255,${0.018 + random() * 0.038})`
           : `rgba(0,0,0,${0.018 + random() * 0.032})`;
-        ctx.lineWidth = 0.45 + random() * 0.7;
+        // A thread is a thread whatever the sheet: keep its width in the pixels
+        // that will be printed, or the weave washes out at half scale.
+        ctx.lineWidth = (0.45 + random() * 0.7) / SPINE_TEXTURE_SCALE;
         ctx.beginPath();
         ctx.moveTo(x, y);
         ctx.lineTo(
@@ -4673,14 +4740,14 @@
 
       const bottomShade = ctx.createLinearGradient(
         0,
-        spineCanvas.height * 0.82,
+        SPINE_H * 0.82,
         0,
-        spineCanvas.height
+        SPINE_H
       );
       bottomShade.addColorStop(0, "rgba(0,0,0,0)");
       bottomShade.addColorStop(1, "rgba(0,0,0,0.12)");
       ctx.fillStyle = bottomShade;
-      ctx.fillRect(0, 0, spineCanvas.width, spineCanvas.height);
+      ctx.fillRect(0, 0, SPINE_W, SPINE_H);
 
       return configureCanvasTexture(
         new THREE.CanvasTexture(spineCanvas),
@@ -4690,24 +4757,25 @@
 
     function makeSpineFoilTexture(book) {
       const foilCanvas = document.createElement("canvas");
-      foilCanvas.width = 384;
-      foilCanvas.height = 1536;
+      foilCanvas.width = Math.round(SPINE_W * SPINE_TEXTURE_SCALE);
+      foilCanvas.height = Math.round(SPINE_H * SPINE_TEXTURE_SCALE);
       const ctx = foilCanvas.getContext("2d");
+      ctx.scale(SPINE_TEXTURE_SCALE, SPINE_TEXTURE_SCALE);
 
-      ctx.clearRect(0, 0, foilCanvas.width, foilCanvas.height);
+      ctx.clearRect(0, 0, SPINE_W, SPINE_H);
       ctx.fillStyle = "#ffffff";
       ctx.strokeStyle = "#ffffff";
       ctx.lineWidth = 2.4;
-      ctx.strokeRect(34, 38, foilCanvas.width - 68, foilCanvas.height - 76);
+      ctx.strokeRect(34, 38, SPINE_W - 68, SPINE_H - 76);
 
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.font = '500 24px Inter, "Helvetica Neue", Arial, sans-serif';
       ctx.letterSpacing = "5px";
-      ctx.fillText(book.roman, foilCanvas.width * 0.5, 118);
+      ctx.fillText(book.roman, SPINE_W * 0.5, 118);
 
       ctx.save();
-      ctx.translate(foilCanvas.width * 0.5, foilCanvas.height * 0.5);
+      ctx.translate(SPINE_W * 0.5, SPINE_H * 0.5);
       ctx.rotate(Math.PI / 2);
       ctx.font = `400 ${book.title.length > 10 ? 58 : 68}px "Iowan Old Style", Baskerville, Georgia, serif`;
       ctx.letterSpacing = "0px";
@@ -4715,11 +4783,11 @@
       ctx.restore();
 
       ctx.beginPath();
-      ctx.arc(foilCanvas.width * 0.5, foilCanvas.height - 120, 24, 0, Math.PI * 2);
+      ctx.arc(SPINE_W * 0.5, SPINE_H - 120, 24, 0, Math.PI * 2);
       ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(foilCanvas.width * 0.5 - 24, foilCanvas.height - 120);
-      ctx.lineTo(foilCanvas.width * 0.5 + 24, foilCanvas.height - 120);
+      ctx.moveTo(SPINE_W * 0.5 - 24, SPINE_H - 120);
+      ctx.lineTo(SPINE_W * 0.5 + 24, SPINE_H - 120);
       ctx.stroke();
 
       return configureCanvasTexture(new THREE.CanvasTexture(foilCanvas));
@@ -4878,23 +4946,22 @@
       const pageHeight = height - PAGE_INSET_Y;
       const pageDepth = depth - 0.026;
 
-      const coverTexture = makeCoverTexture(book);
-      const foilTexture = makeFoilTexture(book);
+      // What a spine on a wall needs, and nothing more. The printed boards and
+      // the printed leaves are the difference between a spine and a book in the
+      // hand, and the wall never shows them - so they are printed on demand.
+      const blank = placeholders();
       const clothBumpTexture = makeClothBumpTexture(book);
       const clothSurfaceMaps = makeClothSurfaceMaps(book);
       const paperFaceTexture = makePaperFaceTexture(book);
-      const interiorPageTextures = makeInteriorPageTextures(book);
-      const paginatedLeafCount = interiorPageTextures.length / 2;
-      book.spreadCount = paginatedLeafCount + 1;
-      const endpaperTexture = makeEndpaperTexture(book);
       const pageEdgeTextures = makePageEdgeTextures(book);
       const spineTexture = makeSpineTexture(book);
       const spineFoilTexture = makeSpineFoilTexture(book);
-      const backCoverTexture = makeBackCoverTexture(book);
-      const backFoilTexture = makeBackFoilTexture(book);
-      const foilEmbossTexture = makeEmbossMap(foilTexture, `${book.id}-front-foil-emboss`);
       const spineEmbossTexture = makeEmbossMap(spineFoilTexture, `${book.id}-spine-foil-emboss`);
-      const backEmbossTexture = makeEmbossMap(backFoilTexture, `${book.id}-back-foil-emboss`);
+
+      // The page count is content, not artwork, so it is known before a single
+      // leaf is printed - the page controls read it immediately.
+      const paginatedLeafCount = interiorLeafCount(book) / 2;
+      book.spreadCount = paginatedLeafCount + 1;
       const cloth = new THREE.MeshPhysicalMaterial({
         color: book.color,
         normalMap: clothSurfaceMaps.normal,
@@ -4910,7 +4977,10 @@
         transparent: true
       });
       const coverArt = new THREE.MeshPhysicalMaterial({
-        map: coverTexture,
+        // Undressed, the board reads as the bound cloth it sits on: the weave
+        // maps are already here, only the printing is missing.
+        color: new THREE.Color(book.color),
+        map: blank.ink,
         normalMap: clothSurfaceMaps.normal,
         normalScale: new THREE.Vector2(0.28, 0.28),
         roughnessMap: clothSurfaceMaps.roughness,
@@ -4926,9 +4996,11 @@
       });
       const foilArt = new THREE.MeshPhysicalMaterial({
         color: book.foil,
-        map: foilTexture,
-        alphaMap: foilTexture,
-        bumpMap: foilEmbossTexture,
+        // Alpha zero until the foil is stamped: an empty alphaMap would read as
+        // fully opaque and turn the whole plane into a gold rectangle.
+        map: blank.clear,
+        alphaMap: blank.clear,
+        bumpMap: blank.flat,
         bumpScale: 0.016,
         roughness: book.id === "cursor" ? 0.22 : 0.2,
         metalness: book.id === "cursor" ? 0.34 : 0.94,
@@ -4973,7 +5045,8 @@
       });
       spineFoilMaterials[index] = spineFoilArt;
       const backArt = new THREE.MeshPhysicalMaterial({
-        map: backCoverTexture,
+        color: new THREE.Color(book.color),
+        map: blank.ink,
         normalMap: clothSurfaceMaps.normal,
         normalScale: new THREE.Vector2(0.28, 0.28),
         roughnessMap: clothSurfaceMaps.roughness,
@@ -4988,9 +5061,9 @@
       });
       const backFoilArt = new THREE.MeshPhysicalMaterial({
         color: book.foil,
-        map: backFoilTexture,
-        alphaMap: backFoilTexture,
-        bumpMap: backEmbossTexture,
+        map: blank.clear,
+        alphaMap: blank.clear,
+        bumpMap: blank.flat,
         bumpScale: 0.016,
         roughness: 0.21,
         metalness: 0.9,
@@ -5004,7 +5077,8 @@
       });
       const endpaperMaterial = new THREE.MeshPhysicalMaterial({
         color: new THREE.Color(book.palette.paperPale).lerp(new THREE.Color(0xf2ead8), 0.5),
-        map: endpaperTexture,
+        // The shared paper face until the patterned endpaper is printed.
+        map: paperFaceTexture,
         bumpMap: paperFaceTexture,
         bumpScale: 0.0018,
         roughness: 0.94,
@@ -5049,9 +5123,11 @@
       });
       const pageMaterial = createFadeMaterial(shared.page);
       const headbandMaterial = createFadeMaterial(shared.headband);
-      const interiorPageMaterials = interiorPageTextures.map((texture) => {
+      // Sized from the page count, not from the artwork: an unprinted leaf is
+      // the same blank paper the unpaginated leaves already carry.
+      const interiorPageMaterials = Array.from({ length: paginatedLeafCount * 2 }, () => {
         const material = createFadeMaterial(shared.pageSheet);
-        material.map = texture;
+        material.map = paperFaceTexture;
         material.bumpMap = paperFaceTexture;
         material.bumpScale = 0.0012;
         material.roughness = 0.96;
@@ -5123,7 +5199,7 @@
         backSurfaceLayered: true,
         clothPbrMaps: true,
         foilEmbossed: true,
-        interiorPageDesigns: interiorPageTextures.length,
+        interiorPageDesigns: paginatedLeafCount * 2,
         flexiblePageSegments: FLEXIBLE_PAGE_SEGMENTS,
         clothLikePageDeformation: true,
         turnInStrips: 8,
@@ -5523,21 +5599,24 @@
         pageSurfaces,
         pageGestureSurfaces: [...pageSurfaces, pageBlock],
         hit,
-        coverTexture,
-        foilTexture,
         clothBumpTexture,
         clothSurfaceMaps,
         paperFaceTexture,
-        interiorPageTextures,
-        endpaperTexture,
         pageEdgeTextures,
         spineTexture,
         spineFoilTexture,
-        backCoverTexture,
-        backFoilTexture,
-        foilEmbossTexture,
         spineEmbossTexture,
-        backEmbossTexture,
+        // The materials the dressing is bound into, and the dressing itself.
+        // Everything below is what the residency manager reads and writes.
+        coverArt,
+        foilArt,
+        backArt,
+        backFoilArt,
+        endpaperMaterial,
+        interiorPageMaterials,
+        dressing: null,
+        leaves: null,
+        leafSequence: null,
         contactShadow,
         opacity: 1,
         lastOffset: null,
@@ -5587,6 +5666,153 @@
           depth
         }
       };
+    }
+
+    // A volume's dressing - its printed boards and its printed leaves - is the
+    // difference between a spine on a wall and a book in the hand. The wall
+    // never shows it, so it is printed when a volume is chosen, one canvas at a
+    // time between frames, and released when the shelf has moved on.
+    const dressingQueue = new Map();
+    const dressedOrder = [];
+    let dressingTimer = 0;
+
+    function dressingUnits(rig) {
+      const book = rig.data;
+      const units = [
+        () => {
+          rig.dressing.cover = makeCoverTexture(book);
+          rig.coverArt.map = rig.dressing.cover;
+          rig.coverArt.color.setHex(0xffffff);
+        },
+        () => {
+          const foil = makeFoilTexture(book);
+          rig.dressing.foil = foil;
+          rig.dressing.foilEmboss = makeEmbossMap(foil, `${book.id}-front-foil-emboss`);
+          rig.foilArt.map = foil;
+          rig.foilArt.alphaMap = foil;
+          rig.foilArt.bumpMap = rig.dressing.foilEmboss;
+        },
+        () => {
+          rig.dressing.back = makeBackCoverTexture(book);
+          rig.backArt.map = rig.dressing.back;
+          rig.backArt.color.setHex(0xffffff);
+        },
+        () => {
+          const foil = makeBackFoilTexture(book);
+          rig.dressing.backFoil = foil;
+          rig.dressing.backFoilEmboss = makeEmbossMap(foil, `${book.id}-back-foil-emboss`);
+          rig.backFoilArt.map = foil;
+          rig.backFoilArt.alphaMap = foil;
+          rig.backFoilArt.bumpMap = rig.dressing.backFoilEmboss;
+        },
+        () => {
+          rig.dressing.endpaper = makeEndpaperTexture(book);
+          rig.endpaperMaterial.map = rig.dressing.endpaper;
+        }
+      ];
+      // The leaves come off the generator in printing order, one per unit.
+      for (let leaf = 0; leaf < rig.paginatedLeafCount * 2; leaf += 1) {
+        const index = leaf;
+        units.push(() => {
+          const next = rig.leafSequence.next();
+          if (next.done) return;
+          rig.leaves[index] = next.value;
+          rig.interiorPageMaterials[index].map = next.value;
+        });
+      }
+      return units;
+    }
+
+    // Swapping a texture for a texture only moves a uniform, so no material is
+    // ever marked for recompilation here - neither on dressing nor on release.
+    function releaseDressing(rig) {
+      dressingQueue.delete(rig);
+      if (!rig.dressing) return;
+      const blank = placeholders();
+      rig.coverArt.map = blank.ink;
+      rig.coverArt.color.set(rig.data.color);
+      rig.backArt.map = blank.ink;
+      rig.backArt.color.set(rig.data.color);
+      rig.foilArt.map = blank.clear;
+      rig.foilArt.alphaMap = blank.clear;
+      rig.foilArt.bumpMap = blank.flat;
+      rig.backFoilArt.map = blank.clear;
+      rig.backFoilArt.alphaMap = blank.clear;
+      rig.backFoilArt.bumpMap = blank.flat;
+      rig.endpaperMaterial.map = rig.paperFaceTexture;
+      rig.interiorPageMaterials.forEach((material) => {
+        material.map = rig.paperFaceTexture;
+      });
+      // Only this volume's own canvases; the shared paper, edges and shadow
+      // belong to every volume and outlive all of them.
+      Object.values(rig.dressing).forEach((texture) => texture?.dispose());
+      rig.leaves.forEach((texture) => texture?.dispose());
+      rig.dressing = null;
+      rig.leaves = null;
+      rig.leafSequence = null;
+    }
+
+    function touchDressed(rig) {
+      const at = dressedOrder.indexOf(rig);
+      if (at >= 0) dressedOrder.splice(at, 1);
+      dressedOrder.push(rig);
+    }
+
+    function trimDressed() {
+      while (dressedOrder.length > DRESSED_VOLUME_BUDGET) {
+        // Never strip the volume in hand, or the one under the lamp.
+        const stale = dressedOrder.find(
+          (rig) => rig !== activeBook && rig !== bookRigs[selectedIndex]
+        );
+        if (!stale) return;
+        dressedOrder.splice(dressedOrder.indexOf(stale), 1);
+        releaseDressing(stale);
+      }
+    }
+
+    function requestDressing(rig, { immediate = false } = {}) {
+      if (!rig) return;
+      touchDressed(rig);
+      if (!rig.dressing) {
+        rig.dressing = {};
+        rig.leaves = [];
+        rig.leafSequence = interiorPageTextureSequence(rig.data);
+        dressingQueue.set(rig, dressingUnits(rig));
+      }
+      if (immediate) {
+        const units = dressingQueue.get(rig);
+        if (units) {
+          while (units.length) units.shift()();
+          dressingQueue.delete(rig);
+          requestFrame();
+        }
+      } else if (!dressingTimer && dressingQueue.size) {
+        dressingTimer = window.setTimeout(pumpDressing, 0);
+      }
+      trimDressed();
+    }
+
+    // Six milliseconds, then hand the thread back. A frame lands between every
+    // slice, so a volume dresses itself over a few hundred milliseconds while
+    // the wall keeps moving. requestIdleCallback would be the natural home for
+    // this, but Safari does not have it.
+    function pumpDressing() {
+      dressingTimer = 0;
+      if (suspended) return;
+      const started = performance.now();
+      let printed = false;
+      while (dressingQueue.size) {
+        const [rig, units] = dressingQueue.entries().next().value;
+        if (!units.length) {
+          dressingQueue.delete(rig);
+          continue;
+        }
+        units.shift()();
+        printed = true;
+        if (performance.now() - started >= 6) break;
+      }
+      if (printed) requestFrame();
+      if (dressingQueue.size) dressingTimer = window.setTimeout(pumpDressing, 0);
     }
 
     function configureResponsiveTargets() {
@@ -6429,6 +6655,9 @@
       if (nextIndex === selectedIndex && !announce) return;
       selectedIndex = nextIndex;
       const book = BOOKS[selectedIndex];
+      // Choosing a volume is the cue to print it. The shelf needs a second
+      // click to open one, so the printing is usually finished by then.
+      requestDressing(bookRigs[selectedIndex]);
       counter.textContent = `${pad(selectedIndex + 1)} / ${pad(BOOKS.length)}`;
       if (SPINE_SHELF) {
         activeRow = BOOKS[selectedIndex].row;
@@ -7529,6 +7758,9 @@
           ? origin
           : inspectButton;
       activeBook = bookRigs[selectedIndex];
+      // A safety net: if the idle printing has not finished, finish it now
+      // rather than open a book with blank paper in it.
+      requestDressing(activeBook, { immediate: true });
       activeBook.contactShadow.visible = false;
       populateDetail(activeBook.data);
       updatePageControls(false);
@@ -8232,6 +8464,13 @@
       resetDetailPress();
       if (rafId) cancelAnimationFrame(rafId);
       rafId = 0;
+      // Dressing that is queued but not yet bound to a material would be
+      // missed by the scene-graph sweep below.
+      if (dressingTimer) clearTimeout(dressingTimer);
+      dressingTimer = 0;
+      dressingQueue.clear();
+      dressedOrder.slice().forEach(releaseDressing);
+      dressedOrder.length = 0;
 
       canvas.removeEventListener("pointermove", onPointerMove);
       canvas.removeEventListener("pointerleave", onPointerLeave);
