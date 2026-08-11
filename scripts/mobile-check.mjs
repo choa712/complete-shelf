@@ -118,8 +118,18 @@ async function connect() {
         .map((a) => a.value ?? a.description).join(" ")}`);
     }
   });
-  const send = (method, params = {}) => new Promise((res) => {
-    const i = ++id; pending.set(i, res);
+  // A command that fails must not read as one that succeeded. A rejected
+  // viewport override, in particular, would leave the camera where it was and
+  // turn camera-survives-resize into a pass that measured nothing.
+  const send = (method, params = {}) => new Promise((res, rej) => {
+    const i = ++id;
+    pending.set(i, (message) => {
+      if (message.error) {
+        rej(new Error(`${method}: ${message.error.message || JSON.stringify(message.error)}`));
+      } else {
+        res(message);
+      }
+    });
     ws.send(JSON.stringify({ id: i, method, params }));
   });
   await new Promise((r) => ws.addEventListener("open", r, { once: true }));
@@ -141,7 +151,10 @@ async function checkLoad({ send, evaluate }, url) {
     ready: document.getElementById("experience")?.classList.contains("webgl-ready") ?? false
   })`);
 
-  send("Page.navigate", { url });
+  // Deliberately not awaited - the interesting part of a load is while it is
+  // happening - but a navigation that fails outright still has to be heard.
+  let navigationError = null;
+  send("Page.navigate", { url }).catch((error) => { navigationError = error; });
   let fallbackSeenAt = null;
   let indicatorAt = null;
   let readyAt = null;
@@ -154,6 +167,11 @@ async function checkLoad({ send, evaluate }, url) {
     if (state.fallback === "grid" && fallbackSeenAt === null) fallbackSeenAt = at;
     if (state.loading === false && indicatorAt === null) indicatorAt = at;
     if (state.ready) { readyAt = at; break; }
+  }
+  if (navigationError) {
+    record("load-no-fallback", false, `navigation failed: ${navigationError.message}`);
+    record("load-indicator-early", false, `navigation failed: ${navigationError.message}`);
+    return null;
   }
 
   record("load-no-fallback", fallbackSeenAt === null,
