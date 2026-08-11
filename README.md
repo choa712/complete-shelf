@@ -13,10 +13,10 @@ paraphrase of the quotation.
 
 ## The collection
 
-Twenty-five volumes across five sections. The index panel lists them all; the wall keeps
+Twenty-six volumes across five sections. The index panel lists them all; the wall keeps
 the literature bay on shelf level I and the philosophy sections on level III.
 
-![The index panel open over the literature bay, listing all twenty-five volumes](assets/screens/index-panel.jpg)
+![The index panel open over the literature bay, listing all twenty-six volumes](assets/screens/index-panel.jpg)
 
 | Section | Volumes |
 | --- | --- |
@@ -24,7 +24,7 @@ the literature bay on shelf level I and the philosophy sections on level III.
 | Schopenhauer | The World as Will and Representation · Counsels and Maxims · The Wisdom of Life · On the Suffering of the World · The Art of Being Right |
 | Stoics | Meditations · On the Shortness of Life · The Enchiridion · Letters from a Stoic |
 | Moralists | Essays · Pensées · Maxims · The Art of Worldly Wisdom |
-| Literature | Otrovert · Schopenhauer's Life Lessons · The Words of Nietzsche · Nineteen Eighty-Four · Dark Psychology · Demian |
+| Literature | Otrovert · An Intact World · Schopenhauer's Life Lessons · The Words of Nietzsche · Nineteen Eighty-Four · Dark Psychology · Demian |
 
 ## Passages and readings
 
@@ -53,6 +53,12 @@ Passages come from public-domain editions. Where a book is still in copyright, t
 page carries a reader's note written for this edition instead of a quotation, marked
 `독서 노트` in its attribution line.
 
+One volume is not built this way. *An Intact World* (온전한 세계) is a single continuous
+piece, so its two pages are not two kinds of page — the prose runs off the verso and onto
+the recto, and the spread reads as one block of type rather than as a pair. Every page
+shares one column, one measure, and one first baseline, which is what keeps an opened
+spread from splitting down the gutter. The signature appears once, at the end.
+
 The passages are quoted, so they are unsigned. The readings are authored, so each one is
 signed at the foot of its page — `lucy`. The colophon says the same in full.
 
@@ -71,6 +77,11 @@ signed at the foot of its page — `lucy`. The colophon says the same in full.
 - A reading mode: opening the cover clears the editorial panel, centres the spread, and
   leaves only close, the two page buttons, and a line of page info. Escape closes the
   book; a second Escape returns it to the shelf.
+- Single-page reading on a screen too narrow to hold a spread. The condition is measured
+  rather than a breakpoint — it begins exactly where the spread stops fitting — and the
+  camera centres one page at a time instead of shrinking both until the prose is too
+  small to read. The buttons then step a page; a dragged sheet still turns a whole leaf,
+  because that is what the gesture is doing.
 - Book-specific color systems that recolor the scene and the editorial detail layout.
 - Procedural cloth, foil, paper, page-edge, wood, roughness, normal, and shadow textures.
 - Deterministic shelf-to-detail transitions with exact endpoints, so reparenting the
@@ -125,6 +136,31 @@ page-canvas aspect — is derived. A bay holds up to eight volumes.
 
 `reading` is an array because the line breaks are the pacing. The renderer keeps them and
 only wraps a line that exceeds the measure.
+
+For a continuous piece, give the volume `prose` instead of `passages` — an array of
+paragraphs, each an array of authored lines:
+
+```js
+{ id: "reading-intact-world",
+  title: "An Intact World", titleKo: "온전한 세계",
+  author: "lucy", discipline: "Literature", date: "2026",
+  note: "One world, lived to the end.",
+  deck: "One paragraph for the detail panel.",
+  proseTitle: "Part I",
+  prose: [
+    ["그는 자신을 불행하다고 느끼지 않았다."],
+    ["갖고 싶다는 갈망도,",
+     "갖지 못했다는 상실도 없이."]
+  ] }
+```
+
+The text is flowed across leaves at one line capacity per page, so the page count follows
+the writing. A paragraph break becomes a rest; a rest that lands on a page edge is dropped
+and the paragraph after it opens the next page, which leaves that page a line short rather
+than running two paragraphs together across the turn. The piece is padded to an even count
+because a leaf has two sides and an odd count would split a spread. Spreads are labelled
+from `proseTitle`, and the detail panel mirrors nothing while reading, since the page is
+not facing a quotation.
 
 When a line needs exactly two visual lines — the common case, and the one where a
 two-syllable stub on the turnover reads worst — the break moves to the word boundary

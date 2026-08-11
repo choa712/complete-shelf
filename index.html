@@ -1844,6 +1844,32 @@
         max-height: 40vh;
       }
 
+      /* On a phone the panel is a capped box and Open book is its last child,
+         so a long deck scrolled the only way into the book out of the panel —
+         silently, since a scrolled overflow shows no edge. The copy scrolls
+         now and the action row stays in the box, which makes reachability a
+         property of the layout rather than of how long a volume's deck runs.
+         Reading mode repurposes this panel as a full-screen chrome layer with
+         absolutely positioned children, so it keeps the block layout. */
+      .experience:not(.is-reading) .detail-panel {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      .experience:not(.is-reading) .detail-editorial {
+        flex: 0 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+      }
+
+      .experience:not(.is-reading) .page-navigation,
+      .experience:not(.is-reading) .passage-quote,
+      .experience:not(.is-reading) .detail-controls {
+        flex: none;
+      }
+
       .detail-title {
         font-size: clamp(3rem, 14vw, 5rem);
       }
@@ -2000,10 +2026,24 @@
       opacity: 0.72;
     }
 
-    @media (max-width: 820px) {
-      .experience.is-reading .page-navigation {
-        padding: 0 14px;
-      }
+    /* Reading one page at a time, that page fills the width, so buttons centred
+       on it would sit on the first character of every line. They drop to the
+       page line instead, off the paper.
+
+       Keyed on the state class rather than a width, because single-page reading
+       is decided by measuring whether the spread fits: a viewport just wide
+       enough to clear a breakpoint can still be too narrow to hold a spread,
+       and the two conditions would then disagree. */
+    .experience.is-reading.is-single-page .page-navigation {
+      top: auto;
+      bottom: clamp(14px, 3.4vh, 34px);
+      align-items: flex-end;
+      padding: 0 14px;
+    }
+
+    .experience.is-reading.is-single-page .page-status {
+      position: static;
+      transform: none;
     }
   </style>
   <script type="importmap">
@@ -2847,6 +2887,81 @@
               "잘하는 쪽으로만 시간을 썼다."
             ] }
         ] },
+      // The one prose volume on the wall: no passage facing a reading, just a
+      // single piece running across every spread.
+      { id: "reading-intact-world", bindingIndex: 31,
+        title: "An Intact World", titleKo: "온전한 세계",
+        author: "lucy", discipline: "Literature", date: "2026",
+        note: "One world, lived to the end.",
+        deck: "A man who never called himself unhappy, naming one absence anyway — and the question under it: a life with love off its center, lacking or simply centered elsewhere?",
+        proseTitle: "Part I",
+        prose: [
+          ["그는 자신을 불행하다고 느끼지 않았다."],
+          ["사랑과 결혼.",
+           "많은 사람이 삶의 중심에 놓고, 그 안에서 가장 깊이 기뻐하거나 무너지는 일.",
+           "그에게는 좀처럼 울리지 않는 말들이었다."],
+          ["갖고 싶다는 갈망도,",
+           "갖지 못했다는 상실도 없이."],
+          ["그럼에도 인간에게 가능한 세계 하나가 자신에게는 열리지 않는다면,",
+           "그 한 부분만큼은 불행이라 부를 수 있지 않을까."],
+          ["그가 고른 단어는 이상하리만큼 고요했다.",
+           "슬픔도 체념도 묻지 않은 채,",
+           "자신의 삶을 조금 멀리 세워두고 빠진 항목 하나를 확인하듯."],
+          ["느끼지 않는 불행도 불행일까."],
+          ["한 번도 가보지 않은 장소는 그리워하기 어렵다.",
+           "그곳의 바람이 어느 쪽에서 불어오는지,",
+           "오후의 빛이 어떤 색으로 기우는지,",
+           "계절이 바뀔 때 무엇부터 사라지는지 알지 못하므로."],
+          ["기억이 없으니 잃었다고 말할 수도 없다."],
+          ["그러나 그 장소가 존재한다는 사실은 안다.",
+           "사람들은 그곳에서 이전의 자신으로는 알 수 없던 기쁨과 두려움을 만났다고 말한다.",
+           "삶이 흔들렸고, 그 흔들림 속에서 비로소 자신을 알게 되었다고."],
+          ["그렇다면 가보지 못한 세계의 넓이를",
+           "마음이 아니라 이성으로 헤아리는 일도 가능할 것이다."],
+          ["그가 말한 불행은 고통의 이름이 아니었다."],
+          ["살아보지 못한 가능성에 붙인 이름."],
+          ["나는 그 말을 지워주고 싶지 않았다.",
+           "그에게 닫힌 문을 애초부터 없던 문처럼 말하는 것 또한 이해는 아닐 테니까."],
+          ["사랑이 한 사람의 질서를 흔들고,",
+           "혼자서는 만나지 못했을 자신에게 데려가는 일이라는 것도 알고 있었다.",
+           "그 세계가 그의 삶에 없다면, 없는 것은 없는 채로 남겨두어야 했다."],
+          ["그러나 하나의 가능성이 열리지 않았다는 사실과",
+           "삶 전체가 덜 완성되었다는 판단은 같은 문장이 아니었다."],
+          ["그는 감정을 크게 말하지 않았다.",
+           "대신 중요하다고 여긴 것 앞에 오래 머물렀다."],
+          ["도울 수 있는데도 모른 척하지 않는 일.",
+           "시간을 내어 곁에 있는 일.",
+           "아무에게나 보여주지 않던 세계의 일부를 조용히 건네는 일."],
+          ["그의 진심은 감정의 크기보다",
+           "자신의 생을 어디에 내어주었는지에 가까웠다."],
+          ["사랑이 삶의 중심에 없다고 해서",
+           "아무것도 사랑하지 않은 것은 아니었다."],
+          ["누군가는 한 사람에게 생을 내어주고,",
+           "누군가는 아직 오지 않은 것에 오래 마음을 둔다."],
+          ["그의 진심은 없었던 것이 아니라,",
+           "사람들이 익숙하게 사랑이라 부르는 방향에서",
+           "조금 비켜나 있었을 뿐."],
+          ["그가 들어가지 못한 세계는 분명 있었다."],
+          ["그 부재를 불행이라 부르겠다면,",
+           "나는 그 말을 빼앗지 않으려 한다."],
+          ["다만 그의 삶 전체까지",
+           "그 한 단어 안에 넣고 싶지는 않았다."],
+          ["삶 한편의 부재와",
+           "한 사람의 불완전함은 같은 말이 아니므로."],
+          ["그는 평범한 행복을 부정하지 않았다.",
+           "그 행복이 자신에게 같은 온도로 도착하지 않았음을 알았을 뿐."],
+          ["그리고 나는 생각했다."],
+          ["누구나 같은 감정으로 삶을 완성해야 하는가.",
+           "사랑을 중심에 두지 않은 삶은 사랑이 빠진 삶인가, 다른 중심을 가진 삶인가.",
+           "느끼지 못한 세계가 있다는 사실은 결핍인가, 차이인가."],
+          ["불행하다고 느끼지 않는 사람이",
+           "자신의 삶 한편의 부재를 불행이라 부를 때,",
+           "우리는 그가 가보지 못한 한 세계를 보아야 할까.",
+           "그가 이미 살아낸 세계의 깊이를 보아야 할까."],
+          ["아니면 온전함이란 모든 것을 경험한 상태가 아니라,",
+           "자신에게 주어진 감각과 가치로",
+           "하나의 세계를 끝까지 살아내는 일에 가까운 것일까."]
+        ] },
       { id: "reading-schopenhauer", bindingIndex: 26,
         title: "Schopenhauer's Life Lessons", titleKo: "쇼펜하우어 인생수업",
         author: "Arthur Schopenhauer", discipline: "Literature", date: "1851",
@@ -2983,10 +3098,18 @@
         chapters: CATEGORY_CHAPTERS[volume.discipline],
         width: base.width * (1 + jitter(1) * 0.6),
         height: base.height * (1 + jitter(2) * 0.5),
-        // Books with more passages sit thicker on the shelf.
+        // Books with more passages sit thicker on the shelf; a prose volume
+        // measures its own extent instead, in paragraphs rather than pages,
+        // because the page count is not known until the sheet aspect is.
         depth: Math.min(
           0.34,
-          Math.max(0.2, base.depth * (1 + jitter(3) * 1.2) + (volume.passages?.length ?? 2) * 0.016)
+          Math.max(
+            0.2,
+            base.depth * (1 + jitter(3) * 1.2)
+              + (volume.passages?.length
+                ?? (volume.prose ? Math.min(6, 2 + Math.round(volume.prose.length / 10)) : 2))
+                * 0.016
+          )
         ),
         seed: base.seed + index * 7
       };
@@ -3126,6 +3249,9 @@
     let readingOpen = false;
     let detailBookHovered = false;
     let currentSpread = 0;
+    // Which half of the spread a narrow screen is reading. Only consulted when
+    // the spread cannot fit the viewport; see isSinglePageReading().
+    let readingLeaf = "recto";
     let pointerDirty = false;
     let suspended = false;
     let viewWidth = window.innerWidth;
@@ -4030,11 +4156,91 @@
       return cursor;
     }
 
+    // A prose volume carries one continuous piece instead of passage/reading
+    // pairs, so its two pages are not two kinds of page: the text simply runs
+    // off the verso and onto the recto. Every page therefore shares one column
+    // position and one capacity, which is also what makes an opened spread read
+    // as a single block of type rather than as two panels.
+    function proseMetrics(book) {
+      const logicalHeight = 768;
+      const logicalWidth = Math.round(logicalHeight * pageSheetAspect(book));
+      const fit = logicalWidth / 512;
+      const lineHeight = 29;
+      const top = 232;
+      const bottom = logicalHeight - 128;
+      return {
+        fontSize: 13.5,
+        lineHeight,
+        top,
+        indent: 13,
+        margin: Math.round(54 * fit),
+        measure: Math.max(6, Math.round(30 * fit)),
+        capacity: Math.max(6, Math.floor((bottom - top) / lineHeight) + 1)
+      };
+    }
+
+    // Flowed once and cached: the page count decides the leaf count, the spread
+    // labels, and the thickness of the volume on the shelf, so all three have to
+    // agree on the same layout.
+    const proseLayouts = new WeakMap();
+    function paginateProse(book) {
+      const cached = proseLayouts.get(book);
+      if (cached) return cached;
+      const metrics = proseMetrics(book);
+      const scratch = document.createElement("canvas").getContext("2d");
+      scratch.font = `400 ${metrics.fontSize}px ${KO_TEXT_FONT}`;
+
+      // One stream of visual lines; null is the rest between paragraphs.
+      const stream = [];
+      (book.prose || []).forEach((paragraph, index) => {
+        if (index) stream.push(null);
+        (Array.isArray(paragraph) ? paragraph : [paragraph]).forEach((line) => {
+          wrapProseLine(scratch, line, metrics.measure, metrics.indent)
+            .forEach((visual, order) => stream.push({ text: visual, wrapped: order > 0 }));
+        });
+      });
+
+      const pages = [];
+      let page = [];
+      const flush = () => {
+        // A rest that lands on a page edge is not a rest, just a short page.
+        while (page.length && !page[page.length - 1]) page.pop();
+        if (page.length) pages.push(page);
+        page = [];
+      };
+      stream.forEach((item) => {
+        if (!page.length && !item) return;
+        page.push(item);
+        if (page.length >= metrics.capacity) flush();
+      });
+      flush();
+      if (!pages.length) pages.push([]);
+
+      // The signature closes the piece, so it needs the room a last line does
+      // not have. When the final page is full it goes on a page of its own.
+      let bylinePage = pages.length - 1;
+      if (pages[bylinePage].length > metrics.capacity - 2) {
+        pages.push([]);
+        bylinePage = pages.length - 1;
+      }
+      // A leaf has two sides; an odd count would split a spread down the middle.
+      if (pages.length % 2) pages.push([]);
+
+      const layout = { pages, metrics, bylinePage };
+      proseLayouts.set(book, layout);
+      return layout;
+    }
+
+    const isProseVolume = (book) => Array.isArray(book?.prose) && book.prose.length > 0;
+
     // Every volume is paginated the same way: a title page, then one facing
     // pair per passage - the aphorism on the left, a reading of it on the
     // right - and a colophon. Page count follows the number of passages.
+    // A prose volume keeps the title page and colophon and flows one piece
+    // through everything in between.
     function makeInteriorPageTextures(book) {
-      const passages = Array.isArray(book.passages) ? book.passages : [];
+      const passages = isProseVolume(book) || !Array.isArray(book.passages) ? [] : book.passages;
+      const prose = isProseVolume(book) ? paginateProse(book) : null;
       const inkColor = new THREE.Color(book.color).lerp(new THREE.Color(0x211b16), 0.62);
       const ink = `#${inkColor.getHexString()}`;
       // Authored at the sheet's real aspect so nothing is stretched on press.
@@ -4118,13 +4324,52 @@
         ctx.font = '500 10px Inter, "Helvetica Neue", Arial, sans-serif';
         ctx.letterSpacing = "1.6px";
         ctx.fillText(
-          `${passages.length} PASSAGES  ·  ${passages.length} READINGS`,
+          prose
+            ? `ONE PROSE  ·  ${prose.pages.length} PAGES`
+            : `${passages.length} PASSAGES  ·  ${passages.length} READINGS`,
           MARGIN,
           logicalHeight - 92
         );
         ctx.letterSpacing = "0px";
         ctx.globalAlpha = 1;
         textures.push(finishLeaf(canvas, "title"));
+      }
+
+      // The prose runs straight through: same column, same measure, same first
+      // baseline on every page, so the break between verso and recto is only a
+      // break in the paper.
+      if (prose) {
+        prose.pages.forEach((lines, pageIndex) => {
+          const { canvas, ctx } = makeLeaf(`prose-${pageIndex}`);
+          if (pageIndex === 0) {
+            eyebrow(ctx, book.proseTitle || "Prose", 150);
+            ctx.globalAlpha = 0.28;
+            ctx.fillRect(MARGIN, 182, COLUMN, 1);
+          }
+          ctx.globalAlpha = 0.82;
+          ctx.font = `400 ${prose.metrics.fontSize}px ${KO_TEXT_FONT}`;
+          let cursor = prose.metrics.top;
+          lines.forEach((line) => {
+            if (line) {
+              ctx.fillText(
+                line.text,
+                MARGIN + (line.wrapped ? prose.metrics.indent : 0),
+                cursor
+              );
+            }
+            cursor += prose.metrics.lineHeight;
+          });
+          if (pageIndex === prose.bylinePage) {
+            const ruleY = Math.min(cursor + 20, logicalHeight - 116);
+            ctx.globalAlpha = 0.24;
+            ctx.fillRect(MARGIN, ruleY, 40, 1);
+            ctx.globalAlpha = 0.5;
+            ctx.font = '400 15px "Iowan Old Style", Baskerville, Georgia, serif';
+            ctx.fillText(READING_BYLINE, MARGIN, ruleY + 30);
+          }
+          ctx.globalAlpha = 1;
+          textures.push(finishLeaf(canvas, `prose-${pageIndex}`));
+        });
       }
 
       passages.forEach((passage, passageIndex) => {
@@ -4221,11 +4466,17 @@
         ctx.font = `400 13px ${KO_TEXT_FONT}`;
         drawProseLines(
           ctx,
-          [
-            "왼쪽 페이지의 문장은 원전에서 옮겼습니다.",
-            `오른쪽 페이지의 산문은 ${READING_BYLINE}가 작성했습니다.`,
-            "해석은 해설이 아니라 한 사람의 독서입니다."
-          ],
+          prose
+            ? [
+                "이 책에는 마주 보는 두 페이지가 없습니다.",
+                "한 편의 산문이 펼침면을 가로질러 이어집니다.",
+                `글은 ${READING_BYLINE}가 썼습니다.`
+              ]
+            : [
+                "왼쪽 페이지의 문장은 원전에서 옮겼습니다.",
+                `오른쪽 페이지의 산문은 ${READING_BYLINE}가 작성했습니다.`,
+                "해석은 해설이 아니라 한 사람의 독서입니다."
+              ],
           MARGIN,
           412,
           chars(34),
@@ -4235,7 +4486,9 @@
         ctx.font = '400 14px "Iowan Old Style", Baskerville, Georgia, serif';
         drawWrappedCanvasText(
           ctx,
-          `Passages from public-domain editions. Readings written by ${READING_BYLINE}.`,
+          prose
+            ? `One prose in one part, written by ${READING_BYLINE}.`
+            : `Passages from public-domain editions. Readings written by ${READING_BYLINE}.`,
           MARGIN,
           544,
           chars(46),
@@ -5379,11 +5632,24 @@
       detailViewOffsetX = Math.max(0, viewWidth * 0.5 - desiredBookCenter);
     }
 
+    const NARROW_INSPECT_SCALE = 0.82;
+
     function getInspectScale() {
-      if (!activeBook || viewWidth < 820) return 0.82;
+      if (!activeBook) return NARROW_INSPECT_SCALE;
       const distance = Math.abs(inspectCameraPosition.z - inspectPosition.z);
       const worldHeight = 2 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5));
       const pixelsPerWorld = viewHeight / Math.max(worldHeight, 0.001);
+      if (viewWidth < 820) {
+        // The narrow scale is pinned to the height, so nothing in it answers to
+        // width: a very narrow window, a split screen, or a zoomed page would
+        // clip even a single page on both edges. This only ever shrinks — a page
+        // that already fits keeps the size the layout was tuned at.
+        const page = activeBook.base.width * NARROW_INSPECT_SCALE * pixelsPerWorld;
+        const room = viewWidth * 0.94;
+        return page > room
+          ? NARROW_INSPECT_SCALE * (room / page)
+          : NARROW_INSPECT_SCALE;
+      }
       const estimatedBookWidth = activeBook.base.width * pixelsPerWorld * 1.16;
       const scaleForSafeWidth = (detailSafeWidth * 0.72) / Math.max(estimatedBookWidth, 1);
       const scaleForHeight = (worldHeight * 0.72) / Math.max(activeBook.base.height, 0.001);
@@ -5395,10 +5661,43 @@
     // board off the volume's own centre. The closed framing also leaves room
     // for the editorial panel, which is out of the way while reading. Both are
     // corrected here so an open spread sits square in the middle of the screen.
+    // A spread is two boards wide. On a phone held upright it cannot fit, and
+    // shrinking it until it does takes the prose below a readable size — so a
+    // screen too narrow to hold the spread reads one page at a time instead.
+    // The condition is measured rather than a breakpoint: single-page reading
+    // begins exactly where the spread stops fitting.
+    function isSinglePageReading() {
+      if (!readingOpen || !activeBook) return false;
+      const spread = activeBook.base.width * 2 * getInspectScale() * getInspectPixelsPerWorld();
+      return spread > viewWidth * 0.98;
+    }
+
+    // Pages in reading order, counted the way the leaves are printed: a title
+    // page alone on the first recto, a facing pair per spread after it, and the
+    // colophon alone on the last verso.
+    const readingPageCount = (book) => Math.max(1, (spreadCountOf(book) - 1) * 2);
+
+    function readingPageIndex() {
+      if (currentSpread === 0) return 0;
+      return currentSpread * 2 - (readingLeaf === "verso" ? 1 : 0);
+    }
+
+    // The first spread has no verso and the last has no recto — those halves are
+    // the endpapers, not pages.
+    function clampReadingLeaf(book) {
+      if (currentSpread === 0) readingLeaf = "recto";
+      else if (currentSpread >= spreadCountOf(book) - 1) readingLeaf = "verso";
+    }
+
     function getReadingViewOffsetX() {
       if (!activeBook) return detailViewOffsetX;
-      const halfSpread = activeBook.base.width * getInspectScale() * 0.5;
-      return -halfSpread * getInspectPixelsPerWorld();
+      const halfBoard = activeBook.base.width * getInspectScale() * 0.5
+        * getInspectPixelsPerWorld();
+      // Centre of the spread, corrected for the hinge.
+      const spreadCentre = -halfBoard;
+      if (!isSinglePageReading()) return spreadCentre;
+      // The recto sits where the closed book stood; the verso is a board left.
+      return readingLeaf === "verso" ? spreadCentre - halfBoard : spreadCentre + halfBoard;
     }
 
     function getInspectPixelsPerWorld() {
@@ -5411,7 +5710,10 @@
     // flank the book instead of the viewport edges.
     function syncReadingSpreadWidth() {
       if (!activeBook) return;
-      const spread = activeBook.base.width * 2 * getInspectScale() * getInspectPixelsPerWorld();
+      // Reading one page at a time, the controls flank that page, not the pair.
+      const boards = isSinglePageReading() ? 1 : 2;
+      const spread = activeBook.base.width * boards * getInspectScale()
+        * getInspectPixelsPerWorld();
       experience.style.setProperty("--reading-spread", `${Math.round(spread)}px`);
     }
 
@@ -6168,6 +6470,17 @@
     }
 
     function getSpreadLabels(book) {
+      if (isProseVolume(book)) {
+        // Continuous prose has no titled spreads, so the label counts them.
+        const spreads = paginateProse(book).pages.length / 2;
+        return [
+          "Title page",
+          ...Array.from({ length: spreads }, (unused, index) => (
+            `${book.proseTitle || "Prose"} · ${pad(index + 1)}`
+          )),
+          "Colophon"
+        ];
+      }
       const passages = book.passages || [];
       return [
         "Title page",
@@ -6178,9 +6491,10 @@
       ];
     }
 
-    // Which passage, if any, the reader is currently facing.
+    // Which passage, if any, the reader is currently facing. A prose volume has
+    // none: there is nothing to mirror, because the page is not facing a quote.
     function getActivePassage(book) {
-      const passages = book.passages || [];
+      const passages = isProseVolume(book) ? [] : (book.passages || []);
       const index = currentSpread - 1;
       if (!readingOpen || index < 0 || index >= passages.length) return null;
       return passages[index];
@@ -6190,18 +6504,26 @@
       const book = activeBook?.data || BOOKS[selectedIndex];
       const labels = getSpreadLabels(book);
       const interactionLocked = mode !== "detail" || !readingOpen;
-      const previousDisabled = interactionLocked || currentSpread === 0;
-      const nextDisabled = interactionLocked || currentSpread === spreadCountOf(book) - 1;
+      // Reading one page at a time, the controls count pages; otherwise spreads.
+      const singlePage = isSinglePageReading();
+      const position = singlePage ? readingPageIndex() : currentSpread;
+      const total = singlePage ? readingPageCount(book) : spreadCountOf(book);
+      const spreadAt = (page) => (singlePage ? (page <= 0 ? 0 : Math.ceil(page / 2)) : page);
+      const previousDisabled = interactionLocked || position === 0;
+      const nextDisabled = interactionLocked || position === total - 1;
 
       previousPageButton.disabled = previousDisabled;
       nextPageButton.disabled = nextDisabled;
       pageLabel.textContent = readingOpen ? labels[currentSpread] : "Closed";
       pageCounter.textContent = readingOpen
-        ? `${pad(currentSpread + 1)} / ${pad(spreadCountOf(book))}`
+        ? `${pad(position + 1)} / ${pad(total)}`
         : "Click book to open";
       // Open cover, quiet interface: the editorial panel steps aside and only
-      // close, the page buttons, and the page line remain.
+      // close, the page buttons, and the page line remain. The single-page
+      // state is published as a class so the controls move on the same measured
+      // condition the framing uses, rather than on a width that can disagree.
       experience.classList.toggle("is-reading", mode === "detail" && readingOpen);
+      experience.classList.toggle("is-single-page", singlePage);
       syncReadingSpreadWidth();
       const activePassage = getActivePassage(book);
       passageQuote.hidden = !activePassage;
@@ -6228,17 +6550,17 @@
         "aria-label",
         previousDisabled
           ? "Previous sample page"
-          : `Previous sample page: ${labels[currentSpread - 1]}`
+          : `Previous sample page: ${labels[spreadAt(position - 1)]}`
       );
       nextPageButton.setAttribute(
         "aria-label",
         nextDisabled
           ? "Next sample page"
-          : `Next sample page: ${labels[currentSpread + 1]}`
+          : `Next sample page: ${labels[spreadAt(position + 1)]}`
       );
 
       if (announce && activeBook && readingOpen) {
-        liveRegion.textContent = `Page ${currentSpread + 1} of ${spreadCountOf(book)}: ${labels[currentSpread]}.`;
+        liveRegion.textContent = `Page ${position + 1} of ${total}: ${labels[currentSpread]}.`;
       }
     }
 
@@ -6247,6 +6569,8 @@
       cancelPageDrag();
       readingOpen = open;
       if (!readingOpen) currentSpread = 0;
+      // Opening or closing the covers both land on the title page's recto.
+      readingLeaf = "recto";
       canvas.classList.remove("has-page-hover", "has-closed-book-hover");
       updatePageControls(false);
       pointerDirty = true;
@@ -6259,15 +6583,37 @@
       requestFrame();
     }
 
-    function turnPage(direction) {
+    // Turning a sheet. A drag is a physical gesture on a leaf, so it always
+    // moves a whole spread even when the screen is reading one page at a time.
+    function turnSpread(direction) {
       if (mode !== "detail" || !readingOpen) return;
-      const nextSpread = clamp(
-        currentSpread + direction,
-        0,
-        spreadCountOf(activeBook?.data || BOOKS[selectedIndex]) - 1
-      );
+      const book = activeBook?.data || BOOKS[selectedIndex];
+      const nextSpread = clamp(currentSpread + direction, 0, spreadCountOf(book) - 1);
       if (nextSpread === currentSpread) return;
       currentSpread = nextSpread;
+      // Land on the half the reader is moving toward, so a dragged sheet does
+      // not drop them into the middle of a page they have already passed.
+      readingLeaf = direction > 0 ? "verso" : "recto";
+      clampReadingLeaf(book);
+      updatePageControls(true);
+      requestFrame();
+    }
+
+    function turnPage(direction) {
+      if (mode !== "detail" || !readingOpen) return;
+      const book = activeBook?.data || BOOKS[selectedIndex];
+      if (!isSinglePageReading()) {
+        turnSpread(direction);
+        return;
+      }
+      const pages = readingPageCount(book);
+      const nextPage = clamp(readingPageIndex() + direction, 0, pages - 1);
+      if (nextPage === readingPageIndex()) return;
+      // Page 0 is the title, alone on a recto; after it the parity of the page
+      // decides which half of which spread it lives on.
+      currentSpread = nextPage === 0 ? 0 : Math.ceil(nextPage / 2);
+      readingLeaf = nextPage === 0 || nextPage % 2 === 0 ? "recto" : "verso";
+      clampReadingLeaf(book);
       updatePageControls(true);
       requestFrame();
     }
@@ -6757,7 +7103,7 @@
       } else if (shouldOpenCover) {
         setReadingOpen(true);
       } else if (shouldTurnPage) {
-        turnPage(turnDirection);
+        turnSpread(turnDirection);
       } else {
         requestFrame();
       }
@@ -6918,8 +7264,12 @@
       } else {
         if (pageDrag.direction === 0 && horizontalDistance >= 6) {
           const direction = deltaX < 0 ? 1 : -1;
+          // The book's own spread count, not the default: a volume with more
+          // passages — or one carrying continuous prose — binds more leaves,
+          // and the constant refused the last legitimate turn on those.
+          const dragBook = activeBook?.data || BOOKS[selectedIndex];
           const directionAvailable = direction > 0
-            ? currentSpread < SPREAD_COUNT - 1
+            ? currentSpread < spreadCountOf(dragBook) - 1
             : currentSpread > 0;
           pageDrag.direction = directionAvailable ? direction : 0;
         }
@@ -7171,6 +7521,7 @@
       readingOpen = false;
       detailBookHovered = false;
       currentSpread = 0;
+      readingLeaf = "recto";
       resetDetailPress();
       focusReturnTarget = origin === canvas
         ? markers.children[selectedIndex] || inspectButton
@@ -7287,6 +7638,7 @@
       readingOpen = false;
       detailBookHovered = false;
       currentSpread = 0;
+      readingLeaf = "recto";
       canvas.classList.remove("has-page-hover", "has-closed-book-hover");
       updatePageControls(false);
       controls.enabled = false;
@@ -7757,9 +8109,14 @@
         activeBook.root.position.copy(inspectPosition);
         activeBook.root.scale.setScalar(getInspectScale());
         transitionCameraTarget.copy(inspectCameraTarget);
+        // A resize can cross the width where a spread stops fitting — turning a
+        // phone on its side does it mid-read. The camera reframes here, so the
+        // controls have to be re-derived in the same breath or the counter and
+        // its labels keep counting in the mode the reader just left.
+        clampReadingLeaf(activeBook.data);
         currentViewOffsetX = readingOpen ? getReadingViewOffsetX() : detailViewOffsetX;
         applyDetailViewOffset();
-        syncReadingSpreadWidth();
+        updatePageControls(false);
         resetInspectionView();
       }
       requestFrame();

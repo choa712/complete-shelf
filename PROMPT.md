@@ -39,6 +39,7 @@ DETAIL VIEW
 - On cover hover, crack the front board open slightly.
 - On cover click or drag, open to the title page.
 - Let readers drag pages in both directions. Use segmented page geometry so the active sheet bends, twists, and settles with a restrained cloth-like curve.
+- On a screen too narrow to hold a spread, read one page at a time: centre the current page rather than scaling both down until the type is unreadable. Decide this by measuring whether the spread fits, not by a breakpoint. The page controls then step a page and count pages; a dragged sheet still turns a whole leaf. Keep the controls off the paper at that size.
 - At the beginning, let the user drag the cover closed.
 - When returning to the shelf, close the pages and animate the book, camera, shelf, and view offset to exact deterministic endpoints before reparenting the model.
 
@@ -57,6 +58,7 @@ ART DIRECTION
 
 PAGINATION
 - Derive page count from content, not from a constant. A title page, one facing pair per passage, and a colophon.
+- Allow a volume to carry one continuous piece instead of passage/reading pairs. Flow it across the leaves at one column, one measure, and one first baseline per page, so an opened spread reads as a single block of type and not as two panels. Pad it to an even page count, and sign it once at the end.
 - Author each page canvas at the aspect of the sheet it is mapped onto. Deriving both from one shared function is the only reliable way; a fixed canvas on a taller sheet stretches every glyph vertically, and the distortion reads as bad type rather than as a bug.
 - Sign the readings and leave the passages unsigned. Quoted text has an author already; authored text needs one.
 - Set the passage large with room around it, and step the type down a size when a quotation runs long rather than letting it overflow the leaf.
