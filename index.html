@@ -649,6 +649,12 @@
       text-align: right;
     }
 
+    /* The sheet lip only exists where the sheet does. A wider screen has room
+       for the whole panel at once and never collapses it. */
+    .sheet-handle {
+      display: none;
+    }
+
     .detail-panel {
       position: absolute;
       top: 20%;
@@ -1031,16 +1037,6 @@
         display: none;
       }
 
-      .detail-panel {
-        top: auto;
-        right: 24px;
-        bottom: 24px;
-        left: 24px;
-        width: auto;
-        max-height: 42vh;
-        padding: 24px;
-      }
-
       .detail-title {
         font-size: clamp(2.5rem, 10vw, 4.5rem);
       }
@@ -1118,13 +1114,6 @@
 
       .marker {
         width: 20px;
-      }
-
-      .detail-panel {
-        right: 12px;
-        bottom: 12px;
-        left: 12px;
-        max-height: 44vh;
       }
 
       .meta-list {
@@ -1412,19 +1401,9 @@
         justify-content: flex-start;
       }
 
-      .detail-panel {
-        top: auto;
-        right: 24px;
-        bottom: 24px;
-        left: 24px;
-        width: auto;
-        max-height: 42vh;
-        transform: translateY(18px);
-      }
-
-      .mode-detail .detail-panel {
-        transform: translateY(0);
-      }
+      /* The panel's narrow-viewport position is settled once, in the sheet
+         block below. Four blocks used to set it at identical specificity and
+         only the last one counted. */
 
       .detail-title {
         font-size: clamp(2.5rem, 12vw, 4.5rem);
@@ -1863,33 +1842,116 @@
         align-self: center;
       }
 
+      /* A sheet, not a caption. The volume gets the screen and the copy is
+         asked for; before this the copy took the bottom 40% whether or not
+         anyone wanted it, and said less than it does now — the deck was clamped
+         to three lines and the specifications were switched off entirely.
+
+         The sheet stays anchored at the bottom and opens by growing its copy
+         rather than by sliding a fixed distance, so nothing has to know the
+         height of the handle and the controls above it. */
       .detail-panel {
         top: auto;
-        right: 22px;
-        bottom: 22px;
-        left: 22px;
+        right: 0;
+        bottom: 0;
+        left: 0;
         width: auto;
-        max-height: 40vh;
+        max-height: 84dvh;
+        padding: 0 20px calc(10px + env(safe-area-inset-bottom));
+        background: color-mix(in srgb, var(--paper-deep) 92%, transparent);
+        border-top: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
+        backdrop-filter: blur(14px);
+        transform: none;
       }
 
-      /* On a phone the panel is a capped box and Open book is its last child,
-         so a long deck scrolled the only way into the book out of the panel —
-         silently, since a scrolled overflow shows no edge. The copy scrolls
-         now and the action row stays in the box, which makes reachability a
-         property of the layout rather than of how long a volume's deck runs.
-         Reading mode repurposes this panel as a full-screen chrome layer with
-         absolutely positioned children, so it keeps the block layout. */
+      .mode-detail .detail-panel {
+        transform: none;
+      }
+
       .experience:not(.is-reading) .detail-panel {
         display: flex;
         flex-direction: column;
-        overflow: hidden;
+        overflow: visible;
       }
 
       .experience:not(.is-reading) .detail-editorial {
         flex: 0 1 auto;
+        max-height: 0;
         min-height: 0;
+        overflow: hidden;
+        opacity: 0;
+        transition:
+          max-height 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+          opacity 0.2s var(--ease-out);
+      }
+
+      .experience:not(.is-reading).sheet-open .detail-editorial {
+        max-height: 62dvh;
         overflow-y: auto;
         overscroll-behavior: contain;
+        opacity: 1;
+      }
+
+      /* What the sheet is for. Both of these are switched off below 820px
+         today, which leaves the panel taking the screen to say almost nothing. */
+      .sheet-open .detail-deck {
+        display: block;
+        -webkit-line-clamp: none;
+        overflow: visible;
+      }
+
+      .sheet-open .meta-list {
+        display: grid;
+      }
+
+      .experience:not(.is-reading) .sheet-handle {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: 100%;
+        min-height: 56px;
+        padding: 4px 0;
+        background: none;
+        border: 0;
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .sheet-handle__grip {
+        width: 26px;
+        height: 3px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--ink) 34%, transparent);
+      }
+
+      .sheet-handle__label {
+        flex: 1 1 auto;
+        overflow: hidden;
+        font-size: 0.86rem;
+        letter-spacing: 0.01em;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .sheet-handle__chevron {
+        flex: none;
+        width: 16px;
+        height: 16px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.5;
+        transition: transform 0.3s var(--ease-out);
+      }
+
+      .sheet-open .sheet-handle__chevron {
+        transform: rotate(180deg);
+      }
+
+      .sheet-handle:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
       }
 
       .experience:not(.is-reading) .page-navigation,
@@ -2149,6 +2211,17 @@
     >
       <button class="close-button" id="close-detail" type="button" aria-label="Return volume to shelf">
         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"></path></svg>
+      </button>
+      <!-- On a phone this is the lip of the sheet: the volume's name, and the
+           way into everything else about it. On a wider screen there is room
+           for all of it at once and the handle is not rendered. -->
+      <button class="sheet-handle" id="sheet-handle" type="button"
+              aria-expanded="false" aria-controls="detail-editorial">
+        <span class="sheet-handle__grip" aria-hidden="true"></span>
+        <span class="sheet-handle__label" id="sheet-handle-label">Volume</span>
+        <svg class="sheet-handle__chevron" viewBox="0 0 16 16" aria-hidden="true">
+          <path d="m3.5 10 4.5-4.5 4.5 4.5"></path>
+        </svg>
       </button>
       <!-- Everything in here steps aside once the cover is open. It stays in
            the accessibility tree so the dialog keeps its name. -->
@@ -3261,6 +3334,8 @@
     const nextButton = document.querySelector("#next");
     const inspectButton = document.querySelector("#inspect");
     const closeButton = document.querySelector("#close-detail");
+    const sheetHandle = document.querySelector("#sheet-handle");
+    const sheetHandleLabel = document.querySelector("#sheet-handle-label");
     const resetButton = document.querySelector("#reset-view");
     const toggleBookButton = document.querySelector("#toggle-book");
     const previousPageButton = document.querySelector("#previous-page");
@@ -3317,6 +3392,7 @@
     let focusReturnTarget = inspectButton;
     let activeBook = null;
     let readingOpen = false;
+    let sheetOpen = false;
     let detailBookHovered = false;
     let currentSpread = 0;
     // Which half of the spread a narrow screen is reading. Only consulted when
@@ -6780,6 +6856,9 @@
     function populateDetail(book) {
       detailEyebrow.textContent = `Volume ${book.roman} · ${book.discipline}`;
       detailTitle.textContent = book.title;
+      // The lip of the sheet says which volume it belongs to, since the title
+      // inside it is not on screen while the sheet is closed.
+      sheetHandleLabel.textContent = `${book.roman} · ${book.title}`;
       detailTitle.classList.toggle("detail-title--long", book.title.length > 16);
       detailDeck.textContent = book.deck;
       detailBinding.textContent = book.binding;
@@ -6883,10 +6962,21 @@
       }
     }
 
+    // The sheet is the phone's way of asking about a volume rather than being
+    // told. Its state is a class, so the wider layout - which never collapses
+    // anything - is untouched by it.
+    function setSheetOpen(open) {
+      sheetOpen = open;
+      experience.classList.toggle("sheet-open", open);
+      sheetHandle.setAttribute("aria-expanded", String(open));
+    }
+
     function setReadingOpen(open, announce = true) {
       if (mode !== "detail" || readingOpen === open) return;
       cancelPageDrag();
       readingOpen = open;
+      // A page needs the screen more than a description does.
+      if (open) setSheetOpen(false);
       if (!readingOpen) currentSpread = 0;
       // Opening or closing the covers both land on the title page's recto.
       readingLeaf = "recto";
@@ -7858,6 +7948,8 @@
       detailPanel.setAttribute("aria-hidden", "false");
       browseUi.inert = true;
       experience.classList.add("mode-detail", "is-opening");
+      // A volume opens showing itself, not its description.
+      setSheetOpen(false);
       pointerLabel.setAttribute("aria-hidden", "true");
       setHovered(-1);
 
@@ -8013,6 +8105,7 @@
         }
       });
       experience.classList.remove("mode-detail", "is-reading");
+      setSheetOpen(false);
       detailPanel.setAttribute("aria-hidden", "true");
       detailPanel.inert = true;
       liveRegion.textContent = `Returning ${activeBook.data.title} to the shelf.`;
@@ -8472,11 +8565,12 @@
       if (mode === "detail" && event.key === "Tab") {
         const focusables = [
           closeButton,
+          sheetHandle,
           toggleBookButton,
           previousPageButton,
           nextPageButton,
           resetButton
-        ].filter((element) => !element.disabled);
+        ].filter((element) => element && !element.disabled && element.offsetParent !== null);
         const current = focusables.indexOf(document.activeElement);
         const next = event.shiftKey
           ? (current <= 0 ? focusables.length - 1 : current - 1)
@@ -8714,6 +8808,34 @@
       nextButton.addEventListener("click", () => navigate(1, nextButton));
       inspectButton.addEventListener("click", () => openDetail(inspectButton));
       closeButton.addEventListener("click", closeDetail);
+      sheetHandle.addEventListener("click", () => setSheetOpen(!sheetOpen));
+      // A sheet invites a drag, so a drag has to work. Direction decides, not
+      // distance travelled: a short flick up means the same as a long one.
+      sheetHandle.addEventListener("pointerdown", (event) => {
+        if (!event.isPrimary) return;
+        const startY = event.clientY;
+        let settled = false;
+        const move = (moveEvent) => {
+          if (settled) return;
+          const travelled = startY - moveEvent.clientY;
+          if (Math.abs(travelled) < 24) return;
+          settled = true;
+          setSheetOpen(travelled > 0);
+        };
+        const end = () => {
+          sheetHandle.removeEventListener("pointermove", move);
+          sheetHandle.removeEventListener("pointerup", end);
+          sheetHandle.removeEventListener("pointercancel", end);
+          // A drag that decided the state must not also be read as a tap.
+          if (settled) sheetHandle.addEventListener("click", (clickEvent) => {
+            clickEvent.stopImmediatePropagation();
+          }, { once: true, capture: true });
+        };
+        sheetHandle.setPointerCapture?.(event.pointerId);
+        sheetHandle.addEventListener("pointermove", move);
+        sheetHandle.addEventListener("pointerup", end);
+        sheetHandle.addEventListener("pointercancel", end);
+      });
       toggleBookButton.addEventListener("click", () => setReadingOpen(!readingOpen));
       previousPageButton.addEventListener("click", () => turnPage(-1));
       nextPageButton.addEventListener("click", () => turnPage(1));

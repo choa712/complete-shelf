@@ -143,6 +143,14 @@ async function checkLoad({ send, evaluate }, url) {
   return readyAt;
 }
 
+// Measured where they are actually used. On the shelf the detail controls are
+// laid out but transparent, which is not the state anyone taps them in.
+async function enterDetail({ evaluate }) {
+  await evaluate('document.getElementById("inspect")?.click()');
+  await sleep(4500);
+  return evaluate('document.getElementById("experience")?.classList.contains("mode-detail") ?? false');
+}
+
 async function checkTouchTargets({ evaluate }) {
   const small = await evaluate(`(() => {
     const ids = ["close-detail", "toggle-book", "reset-view", "previous-page", "next-page",
@@ -216,6 +224,8 @@ async function main() {
     if (readyAt === null) {
       record("console-clean", false, "the shelf never became ready");
     } else {
+      const inDetail = await enterDetail(session);
+      if (!inDetail) record("enter-detail", false, "could not open a volume from the shelf");
       await checkTouchTargets(session);
       await checkCameraAcrossResize(session);
       await checkMemory(session);
