@@ -5632,11 +5632,24 @@
       detailViewOffsetX = Math.max(0, viewWidth * 0.5 - desiredBookCenter);
     }
 
+    const NARROW_INSPECT_SCALE = 0.82;
+
     function getInspectScale() {
-      if (!activeBook || viewWidth < 820) return 0.82;
+      if (!activeBook) return NARROW_INSPECT_SCALE;
       const distance = Math.abs(inspectCameraPosition.z - inspectPosition.z);
       const worldHeight = 2 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5));
       const pixelsPerWorld = viewHeight / Math.max(worldHeight, 0.001);
+      if (viewWidth < 820) {
+        // The narrow scale is pinned to the height, so nothing in it answers to
+        // width: a very narrow window, a split screen, or a zoomed page would
+        // clip even a single page on both edges. This only ever shrinks — a page
+        // that already fits keeps the size the layout was tuned at.
+        const page = activeBook.base.width * NARROW_INSPECT_SCALE * pixelsPerWorld;
+        const room = viewWidth * 0.94;
+        return page > room
+          ? NARROW_INSPECT_SCALE * (room / page)
+          : NARROW_INSPECT_SCALE;
+      }
       const estimatedBookWidth = activeBook.base.width * pixelsPerWorld * 1.16;
       const scaleForSafeWidth = (detailSafeWidth * 0.72) / Math.max(estimatedBookWidth, 1);
       const scaleForHeight = (worldHeight * 0.72) / Math.max(activeBook.base.height, 0.001);
