@@ -7617,6 +7617,7 @@
       pageDrag.lastTime = 0;
       pageDrag.direction = 0;
       pageDrag.kind = null;
+      pageDrag.openingPointer = null;
       canvas.classList.remove("is-page-dragging");
       controls.enabled = mode === "detail";
       if (
@@ -7701,6 +7702,7 @@
     }
 
     function onDetailBookPointerDown(event) {
+      if (event.cameraReplay) return;
       if (
         mode !== "detail"
         || readingOpen
@@ -7737,13 +7739,50 @@
       detailPress.pointerId = null;
     }
 
+    // OrbitControls counts the pointers it is given, so a pinch it never saw the
+    // first finger of reads as a one-finger rotate. This hands that finger over
+    // after the fact, marked so the page handlers let it through.
+    function forwardPointerToCamera(pointer) {
+      if (!pointer) return;
+      const replay = new PointerEvent("pointerdown", {
+        pointerId: pointer.pointerId,
+        pointerType: pointer.pointerType,
+        clientX: pointer.clientX,
+        clientY: pointer.clientY,
+        button: 0,
+        buttons: 1,
+        isPrimary: true,
+        bubbles: true,
+        cancelable: true
+      });
+      replay.cameraReplay = true;
+      canvas.dispatchEvent(replay);
+    }
+
     function onPagePointerDown(event) {
-      if (
-        mode !== "detail"
-        || !activeBook
-        || event.button !== 0
-        || event.isPrimary === false
-      ) return;
+      if (event.cameraReplay) return;
+      if (mode !== "detail" || !activeBook || event.button !== 0) return;
+
+      // A second finger is a pinch, not a page turn. The volume is drawn at 94%
+      // of a phone's width, so the first finger always lands on it, and taking
+      // that finger switched the camera off - which is why zooming and panning
+      // never worked on a phone at all, open book or closed. Settle the page
+      // where it is, give the camera back, and replay the finger it missed.
+      if (event.isPrimary === false) {
+        if (!pageDrag.active) return;
+        const opening = pageDrag.openingPointer;
+        // Cancelled, not committed. A finger added to a drag that had already
+        // crossed the turn threshold would otherwise flip the page and, if it
+        // was a cover, change the render density - in the middle of a gesture
+        // whose whole intent was to look closer at what is already there.
+        cancelPageDrag();
+        // The tap-to-open tracker runs alongside the drag and survives it. A
+        // finger held still while the other pinches would otherwise read as a
+        // tap when it lifts, and open the book the pinch was inspecting.
+        resetDetailPress();
+        forwardPointerToCamera(opening);
+        return;
+      }
 
       setPointerFromEvent(event);
       const coverSurface = coverSurfaceAtPointer();
@@ -7769,6 +7808,13 @@
           ? "cover-close"
           : "cover-open"
         : "page";
+      // Kept so a pinch can hand this finger to the camera later.
+      pageDrag.openingPointer = {
+        pointerId: event.pointerId,
+        pointerType: event.pointerType,
+        clientX: event.clientX,
+        clientY: event.clientY
+      };
       controls.enabled = false;
       canvas.classList.add("has-page-hover", "is-page-dragging");
       canvas.setPointerCapture?.(event.pointerId);
@@ -7872,6 +7918,14 @@
       if (!pageDrag.active || event.pointerId !== pageDrag.pointerId) return;
       event.preventDefault();
       event.stopImmediatePropagation();
+      // Where the finger is now, not where it went down. A pinch replays this
+      // to the camera, and OrbitControls measures its starting span from it -
+      // give it a stale point and the first real move jumps the zoom by however
+      // far the finger had already travelled.
+      if (pageDrag.openingPointer) {
+        pageDrag.openingPointer.clientX = event.clientX;
+        pageDrag.openingPointer.clientY = event.clientY;
+      }
       updatePageDragFromEvent(event);
 
       requestFrame();
@@ -8098,6 +8152,11 @@
       mode = "opening";
       transitionTime = 0;
       readingOpen = false;
+      // openDetail and closeDetail set the reading state directly rather than
+      // through setReadingOpen, so the density has to be re-derived here too -
+      // otherwise leaving an open book by the close control keeps the whole
+      // shelf rendering at the page's density until something resizes.
+      applyPixelRatio();
       detailBookHovered = false;
       currentSpread = 0;
       readingLeaf = "recto";
@@ -8221,6 +8280,11 @@
       mode = "closing";
       transitionTime = 0;
       readingOpen = false;
+      // openDetail and closeDetail set the reading state directly rather than
+      // through setReadingOpen, so the density has to be re-derived here too -
+      // otherwise leaving an open book by the close control keeps the whole
+      // shelf rendering at the page's density until something resizes.
+      applyPixelRatio();
       detailBookHovered = false;
       currentSpread = 0;
       readingLeaf = "recto";
